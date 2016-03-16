@@ -21,17 +21,22 @@ using namespace std;
 int MAX_KERNEL_LENGTH = 31;
 char window_name[14] = "Display Image";
 
-Mat image_rgb;
+//Mat image_rgb;
 Mat image_orig;
 VideoCapture cap;
 Mat data;
 int dataCounter = 0;
 
+int resize_height = 500;
+int resize_width = 500;
+Size size(resize_height,resize_width);
+
 //void plotAxis(Point cntr, double angle);
 int processImg(Mat img);
-int blurImg(Mat src, Mat dst, int i);
+void redAndMoving(Mat frame, Mat prev_frame);
+int blurImg(Mat& src, Mat& dst, int i);
 int showImg(Mat image);
-int thresholdImgByHSV (Mat src, Mat dst);
+int thresholdImgByHSV (Mat& src, Mat& dst);
 int showImgWithHSV(Mat image);
 int findAndDrawContours (Mat img_bw);
 void drawAxis(Mat&, Point, Point, Scalar, const float);
@@ -53,25 +58,39 @@ int main( int argc, char** argv ) {
 	cap >> frame;
 	showImgWithHSV(frame);
 	return 0;*/
+
+	Mat prev_frame;
+	int frameCounter = 0;
 	    for(;;)
 	    {
-	        Mat frame;
+	    	Mat frame;
 	        cap >> frame;
-
 	        if (frame.empty()) {
-	        	        			 // printf( "end of file \n" );
-	        	        			  break;
-	        	        }
-	  //      showImgWithHSV(frame);
+	       	        	        			 // printf( "end of file \n" );
+	       	        	        			  break;
+	       	        	        }
+
+	        if (frameCounter != 0){
+	        	redAndMoving(frame, prev_frame);
+	        }
+
 	    //    pause();
-	        processImg(frame);
+	 //       processImg(frame);
 	    //    showImgWithHSV(frame);
 
-	        if(waitKey(30) >= 0) break;
+	        int res = waitKey(20);
+	        if (res % 256 == 102){
+	        	showImgWithHSV(frame);
+	        //	waitKey(0);
+	        } else if(res >= 0) {
+	        	break;
+	        }
+
+	        frameCounter++;
+	        frame.copyTo(prev_frame);
 	    }
 	    // the camera will be deinitialized automatically in VideoCapture destructor
 	    return 0;
-
 
     //Mat image_rgb;
 	//  image_rgb = imread( argv[1], 1 );
@@ -79,15 +98,75 @@ int main( int argc, char** argv ) {
 //	image_orig = imread(argv[1], -1);
 //	image_orig = imread(argv[1], 1);
 
-
-	//processImg();
-
   return 0;
+}
+
+void redAndMoving(Mat frame, Mat prev_frame){
+
+	//the dst image size,e.g.100x100
+			//	Mat dst3;//dst image
+		resize(frame,frame,size);
+		resize(prev_frame,prev_frame,size);
+
+	//pixels that moved
+	Mat diffImg;
+	Mat diff_thresh;
+	Mat result;
+	Mat prev_frame_gray;
+	Mat frame_gray;
+	Mat prev_frame_blurred;
+	Mat frame_blurred;
+	Mat diff_gray;
+
+	//medianBlur ( frame, frame_blurred, 5 );
+	GaussianBlur( frame, frame_blurred, Size( 5, 5 ), 0, 0 );
+	GaussianBlur( prev_frame, prev_frame_blurred, Size( 5, 5 ), 0, 0 );
+	//cout << frame_blurred.channels() << endl;
+	//medianBlur ( prev_frame, prev_frame_blurred, 5 );
+	//cvtColor(prev_frame_blurred, prev_frame_gray, CV_RGB2GRAY);
+	//cvtColor(frame_blurred, frame_gray, CV_RGB2GRAY);
+
+	absdiff(prev_frame_blurred, frame_blurred, diffImg);
+	cvtColor(diffImg, diff_gray, CV_RGB2GRAY);
+	//Mat diff_blurred;
+	//GaussianBlur( diff_gray, dst, Size( i, i ), 0, 0 );
+	//GaussianBlur ( diff_gray, diff_blurred, 5 );
+	threshold( diff_gray, diff_thresh, 20, 255, THRESH_BINARY );
+
+	int dilation_type = MORPH_RECT;
+	int dilation_size = 11;
+
+	  Mat element = getStructuringElement( dilation_type,
+	                                       Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+	                                       Point( dilation_size, dilation_size ) );
+	  dilate(diff_thresh, result, element);//, Point(-1, -1), 2, 1, 1);
+
+	imshow("threshed frames", result);
+
+	image_orig = frame;
+	Mat image_blurred;
+	Mat image_threshed;
+	  blurImg(image_orig, image_blurred, 31);
+	//  imshow("asdf", dst);
+//	  waitKey(0);
+
+	//	  showImg(image_rgb);
+	  thresholdImgByHSV(image_blurred, image_threshed);
+	 imshow("thresholded by red", image_threshed);
+
+	  Mat dst3;
+	  bitwise_and(result, image_threshed, dst3);
+	//  image_rgb = dst3;
+	  findAndDrawContours (dst3);
+	  showImg(image_orig);
+	//showImg(result);
+	//waitKey(1000);
+//	return 0;
 }
 
 int processImg(Mat img){
 	image_orig = img;
-	Size size(800,800);//the dst image size,e.g.100x100
+	//Size size(800,800);//the dst image size,e.g.100x100
 		Mat dst3;//dst image
 		resize(image_orig,dst3,size);
 		image_orig = dst3;
@@ -95,10 +174,11 @@ int processImg(Mat img){
 		  Mat dst;
 		  Mat dst2;
 		  blurImg(image_orig, dst, 31);
+
 	//	  showImg(image_rgb);
-		  thresholdImgByHSV(image_rgb, dst2);
+		  thresholdImgByHSV(dst, dst2);
 //		  showImg(image_rgb);
-		  findAndDrawContours (image_rgb);
+		  findAndDrawContours (dst2);
 		  showImg(image_orig);
 
 		  return 0;
@@ -211,10 +291,10 @@ int findAndDrawContours (Mat img_bw){
 }
 
 static void onMouse( int event, int x, int y, int f, void* ){
-	Mat image;
-	Size size(800,800);//the dst image size,e.g.100x100
+	Mat image = image_orig.clone();
+	//Size size(800,800);//the dst image size,e.g.100x100
 	 // Mat dst;//dst image
-	  resize(image_rgb,image,size);
+	//  resize(image_rgb,image,size);
 	//  HSV = dst.clone();
 
 	//Vec3b rgb=image.at<Vec3b>(y,x);
@@ -258,12 +338,14 @@ static void onMouse( int event, int x, int y, int f, void* ){
 
 //TODO: could onMouse take the input image??? Or make image_rgb global to a pointer and set it here
 int showImgWithHSV(Mat image){
-	Size size(800,800);//the dst image size,e.g.100x100
+	//Size size(800,800);//the dst image size,e.g.100x100
 	Mat dst;//dst image
 	Mat dst2;
 	resize(image,dst,size);
 	blurImg(dst, dst2, 31);
 	//image_rgb = dst;
+
+	//char window_name2[14] = "hsv filter";
 
 	namedWindow( window_name, CV_WINDOW_AUTOSIZE );
 	setMouseCallback( window_name, onMouse, 0 );
@@ -279,40 +361,40 @@ int showImg(Mat image){
 	//Size size(1200,1000);//the dst image size,e.g.100x100
 	//Mat dst;//dst image
 	//resize(image,dst,size);
-	  namedWindow( "Display Image", CV_WINDOW_AUTOSIZE );
-	  imshow( "Display Image", image );
+	  namedWindow( window_name, CV_WINDOW_AUTOSIZE );
+	  imshow( window_name, image );
 
 	//  waitKey(0);
 
 	  return 0;
 }
 
-int blurImg(Mat src, Mat dst, int i){
+int blurImg(Mat& src, Mat& dst, int i){
 
 	//   	   blur( src, dst, Size( i, i ), Point(-1,-1) );
 		medianBlur ( src, dst, i );
 	//GaussianBlur( src, dst, Size( i, i ), 0, 0 );
-		image_rgb = dst;
-	  //
+	//	image_rgb = dst;
 
     //	 bilateralFilter ( src, dst, i, i*2, i/2 );
      return 0;
 }
 
-int thresholdImgByHSV (Mat src, Mat dst) {
+int thresholdImgByHSV (Mat& src, Mat& dst) {
 
-	cvtColor(src, dst, CV_BGR2HSV);
+	Mat src_hsv;
+	cvtColor(src, src_hsv, CV_BGR2HSV);
 
 	Mat lower_red;
 	Mat upper_red;
-	inRange(dst, Scalar(0, 70, 50), Scalar(10, 140, 140), lower_red);
-	inRange(dst, Scalar(170, 30, 30), Scalar(179, 100, 255), upper_red);
+	//inRange(dst, Scalar(0, 70, 50), Scalar(10, 140, 140), lower_red);
+	//inRange(dst, Scalar(170, 30, 30), Scalar(179, 100, 255), upper_red);
 
-	inRange(dst, Scalar(0, 50, 50), Scalar(10, 255, 255), lower_red);
-	inRange(dst, Scalar(165, 30, 30), Scalar(179, 255, 255), upper_red);
+	inRange(src_hsv, Scalar(0, 50, 50), Scalar(15, 255, 255), lower_red);
+	inRange(src_hsv, Scalar(165, 30, 30), Scalar(179, 255, 255), upper_red);
 
-	Mat dst2;
-	bitwise_or(lower_red, upper_red, dst2);
+	//Mat dst2;
+	bitwise_or(lower_red, upper_red, dst);
 
 	/*imshow("lowerred", lower_red);
 	waitKey(0);
@@ -321,7 +403,7 @@ int thresholdImgByHSV (Mat src, Mat dst) {
 	imshow("or-ed", dst2);
 	waitKey(0);*/
 
-	image_rgb = dst2;
+	//image_rgb = dst2;
 
 	return 0;
 }
