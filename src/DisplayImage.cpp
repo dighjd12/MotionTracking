@@ -22,6 +22,7 @@ int blur_kernel_length = 5;
 char window_name[14] = "Display Image";
 
 //Mat image_rgb;
+vector<Point> prev_snake;
 Mat image_orig;
 VideoCapture cap;
 Mat data;
@@ -41,11 +42,11 @@ int showImgWithHSV(Mat image);
 int findAndDrawContours (Mat img_bw);
 void drawAxis(Mat&, Point, Point, Scalar, const float);
 double getOrientation(const vector<Point> &, Mat&);
+int countOverlaps(vector<Point> candidate, vector<Point>& result);
 
 int main( int argc, char** argv ) {
-	//printing stdout?
-	cout << "hello world" << endl;
 
+	cout << "hello world" << endl;
 
 	cap = VideoCapture(argv[6]); // open the video
 	double numFrames = cap.get(CV_CAP_PROP_FRAME_COUNT);
@@ -53,11 +54,6 @@ int main( int argc, char** argv ) {
 
 	if(!cap.isOpened())  // check if we succeeded
 		return -1;
-
-	/*Mat frame;
-	cap >> frame;
-	showImgWithHSV(frame);
-	return 0;*/
 
 	Mat prev_frame;
 	int frameCounter = 0;
@@ -277,23 +273,101 @@ int findAndDrawContours (Mat img_bw){
 
 	//	cout << "size of contours is" << contours.size() << endl;
 
-	  //  vector<vector<Point> > allPoints;
-
+	    vector<int> candidates = vector<int>();
 	    for (size_t i = 0; i < contours.size(); ++i)
 	    {
+
 	        // Calculate the area of each contour
 	        double area = contourArea(contours[i]);
-	    	//cout << "current area is" << area << endl;
 
 	        // Ignore contours that are too small or too large
 	        if (area < 1e3 || 1e10 < area) continue;
-	        // Draw each contour only for visualisation purposes
-	        drawContours(image_orig, contours, static_cast<int>(i), Scalar(0, 0, 255), 2, 8, hierarchy, 0);
-	        // Find the orientation of each shape
-	        getOrientation(contours[i], image_orig);
+
+	        candidates.insert(candidates.end(), i);
 	    }
 
+	    if (candidates.size()==1) {
+			int snake_idx = candidates[0];
+			prev_snake = contours[snake_idx]; //TODO: does this save to the globbal?
+			// Draw each contour only for visualisation purposes
+			drawContours(image_orig, contours, static_cast<int>(snake_idx), Scalar(0, 0, 255), 2, 8, hierarchy, 0);
+			// Find the orientation of each shape
+			getOrientation(contours[snake_idx], image_orig);
+
+		}
+
+	    if (prev_snake.empty()){ //if not deesignated yet
+
+			//TODO: what should i do?
+			//just draw all the candidates out
+			for (size_t i = 0; i < candidates.size(); ++i)
+			{
+
+				int candidate_idx = candidates[i];
+				// Draw each contour only for visualisation purposes
+				drawContours(image_orig, contours, static_cast<int>(candidate_idx), Scalar(0, 0, 255), 2, 8, hierarchy, 0);
+				// Find the orientation of each shape
+				getOrientation(contours[candidate_idx], image_orig);
+
+			}
+		}else{
+
+			if (candidates.size()==0){
+				//TODO
+
+			}
+			else{
+				// if we have the previous snake segment, then use it to compare with current candidates
+				// to decide which one (or ones) look the most similar to the previous snake segment
+				// also if there are some other objects segmented together with the snake, masks that out.
+
+				int threshold_area = 300;
+				//TODO set prev_snake
+				vector<Point> snakes = vector<Point>();
+				vector<Point> tmp_contour = vector<Point>();
+				for (size_t i = 0; i < candidates.size(); ++i) { //loop through all the candidates
+					int candidate_idx = candidates[i];
+					int res = countOverlaps(contours[candidate_idx], tmp_contour);
+					if (res > threshold_area){
+						drawContours(image_orig, contours, static_cast<int>(candidate_idx), Scalar(0, 0, 255), 2, 8, hierarchy, 0);
+						snakes.insert(snakes.end(), tmp_contour.begin(), contours[candidate_idx].end());
+					}//TODO: what if the segment is merged with another red stuff??/ mask out extra using the prev_snake?
+				}
+				getOrientation(snakes, image_orig);
+			}
+
+		}
+
 	    return 0;
+}
+
+/* goes through the points in the candidate segment, and finds overlap of points
+ * with the prev_snake segment
+ * TODO: easier way to do this? */
+int countOverlaps(vector<Point> candidate, vector<Point>& result){
+
+	/*
+	Mat mean;
+	reduce(candidate, mean, 0, CV_REDUCE_AVG, -1);
+	Point mean_pt(mean.at<float>(0,0), mean.at<float>(0,1));
+
+	if (find(prev_snake.begin(), prev_snake.end(), mean_pt) != prev_snake.end()){ //found the mean in prev snake
+		return 1;
+	}
+	return 0;
+	*/
+
+	int counter = 0;
+
+	for (size_t i = 0; i < candidate.size(); ++i){
+		if (find(prev_snake.begin(), prev_snake.end(), candidate[i]) != prev_snake.end()){
+			counter++;
+		}
+		//TODO: also find the intersection of those and then also add candidate pixels that are not "far away" from those
+	}
+
+	return counter;
+
 }
 
 static void onMouse( int event, int x, int y, int f, void* ){
