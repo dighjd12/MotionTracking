@@ -18,7 +18,7 @@ using namespace cv;
 using namespace std;
 //using namespace cv::plot;
 
-int MAX_KERNEL_LENGTH = 31;
+int blur_kernel_length = 5;
 char window_name[14] = "Display Image";
 
 //Mat image_rgb;
@@ -47,7 +47,7 @@ int main( int argc, char** argv ) {
 	cout << "hello world" << endl;
 
 
-	cap = VideoCapture(argv[5]); // open the video
+	cap = VideoCapture(argv[6]); // open the video
 	double numFrames = cap.get(CV_CAP_PROP_FRAME_COUNT);
 	data.create(numFrames, 1, CV_64F);
 
@@ -117,10 +117,11 @@ void redAndMoving(Mat frame, Mat prev_frame){
 	Mat prev_frame_blurred;
 	Mat frame_blurred;
 	Mat diff_gray;
+	Mat diff_blurred;
 
 	//medianBlur ( frame, frame_blurred, 5 );
-	GaussianBlur( frame, frame_blurred, Size( 5, 5 ), 0, 0 );
-	GaussianBlur( prev_frame, prev_frame_blurred, Size( 5, 5 ), 0, 0 );
+	GaussianBlur( frame, frame_blurred, Size( 3, 3 ), 0, 0 );
+	GaussianBlur( prev_frame, prev_frame_blurred, Size( 3, 3 ), 0, 0 );
 	//cout << frame_blurred.channels() << endl;
 	//medianBlur ( prev_frame, prev_frame_blurred, 5 );
 	//cvtColor(prev_frame_blurred, prev_frame_gray, CV_RGB2GRAY);
@@ -128,13 +129,13 @@ void redAndMoving(Mat frame, Mat prev_frame){
 
 	absdiff(prev_frame_blurred, frame_blurred, diffImg);
 	cvtColor(diffImg, diff_gray, CV_RGB2GRAY);
-	//Mat diff_blurred;
-	//GaussianBlur( diff_gray, dst, Size( i, i ), 0, 0 );
+
+	GaussianBlur( diff_gray, diff_blurred, Size( 3, 3 ), 0, 0 );
 	//GaussianBlur ( diff_gray, diff_blurred, 5 );
-	threshold( diff_gray, diff_thresh, 20, 255, THRESH_BINARY );
+	threshold( diff_blurred, diff_thresh, 20, 255, THRESH_BINARY );
 
 	int dilation_type = MORPH_RECT;
-	int dilation_size = 11;
+	int dilation_size = 1;
 
 	  Mat element = getStructuringElement( dilation_type,
 	                                       Size( 2*dilation_size + 1, 2*dilation_size+1 ),
@@ -146,18 +147,26 @@ void redAndMoving(Mat frame, Mat prev_frame){
 	image_orig = frame;
 	Mat image_blurred;
 	Mat image_threshed;
-	  blurImg(image_orig, image_blurred, 31);
+	  blurImg(image_orig, image_blurred, blur_kernel_length);
 	//  imshow("asdf", dst);
 //	  waitKey(0);
 
 	//	  showImg(image_rgb);
+	  Mat image_final;
 	  thresholdImgByHSV(image_blurred, image_threshed);
-	 imshow("thresholded by red", image_threshed);
+	  dilation_type = MORPH_ELLIPSE;
+	  	dilation_size = 2;
 
-	  Mat dst3;
-	  bitwise_and(result, image_threshed, dst3);
+	  	  Mat element2 = getStructuringElement( dilation_type,
+	  	                                       Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+	  	                                       Point( dilation_size, dilation_size ) );
+	  	  dilate(image_threshed, image_final, element2);
+	 imshow("thresholded by red", image_final);
+
+	//  Mat dst3;
+//	  bitwise_and(result, image_threshed, dst3);
 	//  image_rgb = dst3;
-	  findAndDrawContours (dst3);
+	  findAndDrawContours (image_final);
 	  showImg(image_orig);
 	//showImg(result);
 	//waitKey(1000);
@@ -173,7 +182,7 @@ int processImg(Mat img){
 
 		  Mat dst;
 		  Mat dst2;
-		  blurImg(image_orig, dst, 31);
+		  blurImg(image_orig, dst, blur_kernel_length);
 
 	//	  showImg(image_rgb);
 		  thresholdImgByHSV(dst, dst2);
@@ -229,16 +238,13 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
         eigen_val[i] = pca_analysis.eigenvalues.at<double>(0, i);
     }
 
-    //cout << eigen_val[1] << endl;
-   // cout << eigen_val[0] << endl;
-
     // Draw the principal components
     circle(img, cntr, 3, Scalar(255, 0, 255), 2);
     Point p1 = cntr + 0.02 * Point(static_cast<int>(eigen_vecs[0].x * eigen_val[0]), static_cast<int>(eigen_vecs[0].y * eigen_val[0]));
-    Point p2 = cntr - 0.02 *Point(static_cast<int>(eigen_vecs[1].x * eigen_val[1]), static_cast<int>(eigen_vecs[1].y * eigen_val[1]));
-    drawAxis(img, cntr, p1, Scalar(0, 255, 0), 0.5);
-    //..line(img, cntr, p1, Scalar(0, 255, 0), 1, CV_AA);
-    drawAxis(img, cntr, p2, Scalar(255, 255, 0), 1);
+    line(img, cntr, p1, Scalar(0, 255, 0), 1, CV_AA); //principal axis
+    Point p2 = cntr - 0.08 *Point(static_cast<int>(eigen_vecs[1].x * eigen_val[1]), static_cast<int>(eigen_vecs[1].y * eigen_val[1]));
+    line(img, cntr, p2, Scalar(255, 255, 0), 1, CV_AA); //second principal axis
+
     double angle = atan2(eigen_vecs[0].y, eigen_vecs[0].x); // orientation in radians
 
   //  plotAxis (cntr, angle);
@@ -302,8 +308,10 @@ static void onMouse( int event, int x, int y, int f, void* ){
 	//int G=rgb.val[1];
 	//int R=rgb.val[2];
 
+  Mat HSV_1;
   Mat HSV;
-  cvtColor(image, HSV,CV_BGR2HSV);
+  cvtColor(image, HSV_1,CV_BGR2HSV);
+  medianBlur ( HSV_1, HSV,  blur_kernel_length);
   //Mat RGB=image(Rect(x,y,1,1));
 
 	//Mat image = sr.clone();
@@ -340,9 +348,9 @@ static void onMouse( int event, int x, int y, int f, void* ){
 int showImgWithHSV(Mat image){
 	//Size size(800,800);//the dst image size,e.g.100x100
 	Mat dst;//dst image
-	Mat dst2;
+	//Mat dst2;
 	resize(image,dst,size);
-	blurImg(dst, dst2, 31);
+	//blurImg(dst, dst2, 31);
 	//image_rgb = dst;
 
 	//char window_name2[14] = "hsv filter";
@@ -372,7 +380,9 @@ int showImg(Mat image){
 int blurImg(Mat& src, Mat& dst, int i){
 
 	//   	   blur( src, dst, Size( i, i ), Point(-1,-1) );
-		medianBlur ( src, dst, i );
+		Mat src_hsv;
+		cvtColor(src, src_hsv, CV_BGR2HSV);
+		medianBlur ( src_hsv, dst, i );
 	//GaussianBlur( src, dst, Size( i, i ), 0, 0 );
 	//	image_rgb = dst;
 
@@ -382,16 +392,13 @@ int blurImg(Mat& src, Mat& dst, int i){
 
 int thresholdImgByHSV (Mat& src, Mat& dst) {
 
-	Mat src_hsv;
-	cvtColor(src, src_hsv, CV_BGR2HSV);
-
 	Mat lower_red;
 	Mat upper_red;
 	//inRange(dst, Scalar(0, 70, 50), Scalar(10, 140, 140), lower_red);
 	//inRange(dst, Scalar(170, 30, 30), Scalar(179, 100, 255), upper_red);
 
-	inRange(src_hsv, Scalar(0, 50, 50), Scalar(15, 255, 255), lower_red);
-	inRange(src_hsv, Scalar(165, 30, 30), Scalar(179, 255, 255), upper_red);
+	inRange(src, Scalar(0, 50, 50), Scalar(15, 150, 150), lower_red);
+	inRange(src, Scalar(165, 30, 30), Scalar(179, 255, 255), upper_red);
 
 	//Mat dst2;
 	bitwise_or(lower_red, upper_red, dst);
