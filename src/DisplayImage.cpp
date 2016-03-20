@@ -20,6 +20,16 @@ using namespace std;
 int blur_kernel_length = 5;
 char window_name[20] = "original frame";
 
+char x_window[] = "frame no vs x";
+char y_window[] = "frame no vs y";
+
+Mat x_plot;
+Mat y_plot;
+
+int frame_no = 0;
+vector<Point> xyData = vector<Point>();
+vector<double> thData = vector<double>();
+
 vector<Point> prev_snake;
 Mat image_orig;
 VideoCapture cap;
@@ -31,7 +41,7 @@ int resize_height = 500;
 int resize_width = 500;
 Size size(resize_height,resize_width);
 
-//void plotAxis(Point cntr, double angle);
+void plotAxis(Point cntr, double angle);
 void redAndMoving(Mat frame, Mat prev_frame);
 int blurImg(Mat& src, Mat& dst, int i);
 int thresholdImgByHSV (Mat& src, Mat& dst);
@@ -45,8 +55,16 @@ int main( int argc, char** argv ) {
 	cout << "hello world" << endl;
 
 	cap = VideoCapture(argv[6]); // open the video
-	//double numFrames = cap.get(CV_CAP_PROP_FRAME_COUNT);
+	double numFrames = cap.get(CV_CAP_PROP_FRAME_COUNT);
+	int num_col = resize_width;
+	int num_row = resize_height;
 	//data.create(numFrames, 1, CV_64F);
+
+	x_plot= Mat::zeros( num_col, numFrames, CV_8UC3 );
+	y_plot = Mat::zeros( num_row, numFrames, CV_8UC3 );
+	xyData.insert(xyData.end(), Point(0,0));
+	thData.insert(thData.end(), 0.0);
+
 
 	if(!cap.isOpened())  // check if we succeeded
 		return -1;
@@ -186,27 +204,33 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
 
     double angle = atan2(eigen_vecs[0].y, eigen_vecs[0].x); // orientation in radians
 
-  //  plotAxis (cntr, angle);
+    plotAxis (cntr, angle);
 
     return angle;
 }
 
-/*
+/* plots center and angle of the axes on one window */
 void plotAxis(Point cntr, double angle){
+	//TODO: do time instead of frame no?? *.*
 
-	data.at(dataCounter++, 0) = cntr.x;
-	 Mat plot_result;
-	 Mat data2;
-	 //Ptr<plot::Plot2d> plot;
+	Point prevPoint = xyData.back();
 
-	    Ptr<plot::Plot2d> plot2 = plot::createPlot2d( data2 );
-	//    plot->setPlotBackgroundColor( Scalar( 50, 50, 50 ) ); // i think it is not implemented yet
-	  //  plot->setPlotLineColor( Scalar( 50, 50, 255 ) );
-	  //  plot->render( plot_result );
+	/* inverted y just for easy visualization */
+	Point prevX = Point(frame_no, prevPoint.x);
+	Point prevY = Point(frame_no, resize_height-prevPoint.y);
+	frame_no++;
+	Point currX = Point(frame_no, cntr.x);
+	Point currY = Point(frame_no, resize_height-cntr.y);
 
-	    imshow( "plot", plot_result );
+	line(x_plot, prevX, currX, Scalar(255, 255, 255), 1, CV_AA);
+	line(y_plot, prevY, currY, Scalar(255, 255, 255), 1, CV_AA);
+	//line(img, cntr, p2, Scalar(255, 255, 255), 1, CV_AA);
 
-}*/
+	xyData.insert(xyData.end(), cntr);
+
+	imshow( x_window, x_plot );
+	imshow( y_window, y_plot );
+}
 
 //TODO: maybe only do this after doing normal contour finding and num contours not 1?
 /* finds and draws contour of the snake on the original image given the thresholded image.
@@ -214,10 +238,14 @@ void plotAxis(Point cntr, double angle){
  * otherwise, will use the previously defined snake to find the most matching snake. */
 int findAndDrawContours (Mat img_bw){
 
+		double area_lower_bound = 1e3;
+		double area_upper_bound = 1e10;
 	    if (!prev_snake.empty()){
 	    	// if previous snake is defined,
 	    	//find a bounding box for the prev_snake and bloat it to account for some movement
 	    	//mask the image using the box and find the contours only within that area
+
+	    	area_lower_bound = 1e2;
 
 			int scale = 1;
 			int bloat_amount = 10; //TODO: way to calculate good bloat amount using scale, size of orig img??
@@ -250,7 +278,7 @@ int findAndDrawContours (Mat img_bw){
 	        double area = contourArea(contours[i]);
 
 	        // Ignore contours that are too small or too large
-	        if (area < 1e3 || 1e10 < area) continue; //TODO: these sizes too.. if prev snake defined, then use smaller lower bound !!
+	        if (area < area_lower_bound || area_upper_bound < area) continue;
 
 	        candidates.insert(candidates.end(), i);
 	    }
@@ -348,16 +376,61 @@ static void onMouse( int event, int x, int y, int f, void* ){
 	imshow( window_name, HSV );
 }
 
+static void onMouseX( int event, int x, int y, int f, void* ){
+
+	Mat x_plot_copy = x_plot.clone();
+
+    char name[30];
+    sprintf(name,"frame number=%d",x);
+    putText(x_plot_copy,name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,255,0), 2,8,false );
+
+    int coord = -1;
+	try{
+		coord = xyData.at(x).x;
+	} catch (std::out_of_range){
+		coord = -1;
+	}
+    sprintf(name,"X=%d",coord);
+    putText(x_plot_copy,name, Point(25,300) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
+
+	imshow( x_window, x_plot_copy );
+}
+
+/* event-based onMouse function that will show the hsv values of the pixel
+ * that the mouse is hovering on */
+static void onMouseY( int event, int x, int y, int f, void* ){
+
+	Mat y_plot_copy = y_plot.clone();
+
+	char name[30];
+	sprintf(name,"frame number=%d",x);
+	putText(y_plot_copy,name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,255,0), 2,8,false );
+
+	int coord = -1;
+	try{
+		coord = xyData.at(x).y;
+	} catch (std::out_of_range){
+		coord = -1;
+	}
+	sprintf(name,"Y=%d", coord);
+	putText(y_plot_copy,name, Point(25,300) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
+
+	imshow( y_window, y_plot_copy );
+}
+
 /* shows the hsv image where mouse location will tell the pixel value
  * press a key to exit */
 int showImgWithHSV(Mat image){
 
 	Mat dst;
-	resize(image,dst,size);
+	resize(image, dst, size);
 
-	namedWindow( window_name, CV_WINDOW_AUTOSIZE );
 	setMouseCallback( window_name, onMouse, 0 );
+	setMouseCallback( x_window, onMouseX, 0 );
+	setMouseCallback( y_window, onMouseY, 0 );
 	imshow(window_name, dst);
+	imshow(x_window, x_plot);
+	imshow(y_window, y_plot);
 
 	waitKey(0);
 
