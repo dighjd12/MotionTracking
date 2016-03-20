@@ -22,9 +22,11 @@ char window_name[20] = "original frame";
 
 char x_window[] = "frame no vs x";
 char y_window[] = "frame no vs y";
+char th_window[] = "frame no vs th";
 
 Mat x_plot;
 Mat y_plot;
+Mat th_plot;
 
 int frame_no = 0;
 vector<Point> xyData = vector<Point>();
@@ -60,11 +62,10 @@ int main( int argc, char** argv ) {
 	int num_row = resize_height;
 	//data.create(numFrames, 1, CV_64F);
 
-	x_plot= Mat::zeros( num_col, numFrames, CV_8UC3 );
-	y_plot = Mat::zeros( num_row, numFrames, CV_8UC3 );
-	xyData.insert(xyData.end(), Point(0,0));
-	thData.insert(thData.end(), 0.0);
-
+	x_plot= Mat::zeros( num_col, numFrames+1, CV_8UC3 );
+	y_plot = Mat::zeros( num_row, numFrames+1, CV_8UC3 );
+	th_plot = Mat::zeros( 360, numFrames+1, CV_8UC3 );
+	line(th_plot, Point(0,180), Point(numFrames, 180), Scalar(255, 255, 255), 1, CV_AA);
 
 	if(!cap.isOpened())  // check if we succeeded
 		return -1;
@@ -213,23 +214,39 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
 void plotAxis(Point cntr, double angle){
 	//TODO: do time instead of frame no?? *.*
 
-	Point prevPoint = xyData.back();
+	if (xyData.empty()){
+		xyData.insert(xyData.end(), cntr);
+		thData.insert(thData.end(), angle);
 
-	/* inverted y just for easy visualization */
+		imshow( x_window, x_plot );
+		imshow( y_window, y_plot );
+		imshow( th_window, th_plot );
+		return;
+	}
+
+	Point prevPoint = xyData.back();
+	double prevAngle = thData.back();
+
+	/* inverted y and changed th to degrees just for easy visualization */
 	Point prevX = Point(frame_no, prevPoint.x);
 	Point prevY = Point(frame_no, resize_height-prevPoint.y);
+	Point prevTh = Point(frame_no, 180 - prevAngle*180/M_PI);
 	frame_no++;
 	Point currX = Point(frame_no, cntr.x);
 	Point currY = Point(frame_no, resize_height-cntr.y);
+	Point currTh = Point(frame_no, 180 - angle*180/M_PI);
 
 	line(x_plot, prevX, currX, Scalar(255, 255, 255), 1, CV_AA);
 	line(y_plot, prevY, currY, Scalar(255, 255, 255), 1, CV_AA);
+	line(th_plot, prevTh, currTh, Scalar(255, 255, 255), 1, CV_AA);
 	//line(img, cntr, p2, Scalar(255, 255, 255), 1, CV_AA);
 
 	xyData.insert(xyData.end(), cntr);
+	thData.insert(thData.end(), angle);
 
 	imshow( x_window, x_plot );
 	imshow( y_window, y_plot );
+	imshow( th_window, th_plot );
 }
 
 //TODO: maybe only do this after doing normal contour finding and num contours not 1?
@@ -418,6 +435,31 @@ static void onMouseY( int event, int x, int y, int f, void* ){
 	imshow( y_window, y_plot_copy );
 }
 
+static void onMouseTh( int event, int x, int y, int f, void* ){
+
+	Mat th_plot_copy = th_plot.clone();
+
+	char name[30];
+	sprintf(name,"frame number=%d",x);
+	putText(th_plot_copy,name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,255,0), 2,8,false );
+
+	double coord = -1;
+	try{
+		coord = thData.at(x);
+
+		sprintf(name,"Th=%f rads", coord);
+		putText(th_plot_copy,name, Point(25,300) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
+
+		sprintf(name,"Th=%f degs", coord*180/M_PI);
+		putText(th_plot_copy,name, Point(25,350) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
+
+	} catch (std::out_of_range){
+		//coord = -1;
+	}
+
+	imshow( th_window, th_plot_copy );
+}
+
 /* shows the hsv image where mouse location will tell the pixel value
  * press a key to exit */
 int showImgWithHSV(Mat image){
@@ -428,9 +470,11 @@ int showImgWithHSV(Mat image){
 	setMouseCallback( window_name, onMouse, 0 );
 	setMouseCallback( x_window, onMouseX, 0 );
 	setMouseCallback( y_window, onMouseY, 0 );
+	setMouseCallback( th_window, onMouseTh, 0 );
 	imshow(window_name, dst);
 	imshow(x_window, x_plot);
 	imshow(y_window, y_plot);
+	imshow(th_window, th_plot);
 
 	waitKey(0);
 
