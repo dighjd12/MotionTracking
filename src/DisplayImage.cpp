@@ -5,166 +5,230 @@
  *      Author: gamjatang1
  */
 
-//#include <opencv2/cv.h>
 #include <cv.h>
 #include <highgui.h>
-//#include <opencv2/imgproc.hpp>
-//#include <opencv2/highgui.hpp>
-//#include <opencv2/core.hpp>
-//#include "plot.hpp"
-//#include <opencv2/plot.hpp>
+#include <iostream>
+#include <fstream>
+#include "Display.h"
 
 using namespace cv;
 using namespace std;
 
-int blur_kernel_length = 5;
-char window_name[20] = "original frame";
+#include "astar.h"
+using namespace AStar;
 
-char x_window[] = "frame no vs x";
-char y_window[] = "frame no vs y";
-char th_window[] = "frame no vs th";
+const int blur_kernel_length = 5;
+const char original_frame_window[20] = "original frame";
+const char red_thresholded_window[30] = "thresholded by red (hsv)";
 
-Mat x_plot;
-Mat y_plot;
-Mat th_plot;
+int frameCounter = 0;
+const int astarFrameCount = 20;
 
-int frame_no = 0;
-vector<Point> xyData = vector<Point>();
+double dst_angle = M_PI/2; //TODO make this user-specified
+
+vector<double> xData = vector<double>();
+vector<double> yData = vector<double>();
 vector<double> thData = vector<double>();
+vector<double> th2Data = vector<double>();
+int low_pass_length = 10;
+Mat weightsMat;
+
+Mat dataMat;
 
 vector<Point> prev_snake;
 Mat image_orig;
 VideoCapture cap;
-//Mat data;
-//int dataCounter = 0;
+
+// indicates that enough points have incremented to run astar
+bool pt_flag = false;
+// indicates that destination point has been specified
+bool dst_flag = false;
+Point curr_pt;
+double curr_angle = 0;
+Point dst_pt;
 
 //global size object for resizing all images
 int resize_height = 500;
-int resize_width = 500;
-Size size(resize_height,resize_width);
+int resize_width = 1000;
+Size size(resize_width,resize_height);
 
-void plotAxis(Point cntr, double angle);
-void redAndMoving(Mat frame, Mat prev_frame);
-int blurImg(Mat& src, Mat& dst, int i);
-int thresholdImgByHSV (Mat& src, Mat& dst);
-int showImgWithHSV(Mat image);
-int findAndDrawContours (Mat img_bw);
-double getOrientation(const vector<Point> &, Mat&);
-//int countOverlaps(vector<Point> candidate, vector<Point>& result);
+// + video cap vs realtime
+// connected components? masking the background, ml to optimize the thresholding
+// at first, point to where about the snake will be,
+//threshold choosing??
+
+//TODO: !!!!!1!!
+//axis ---> make it consistent, s.t. green one is the longer axis
+
+// a* with states
+//divide using grids, be able to click destination and know where you are.
+// things to consider: (+= bounds for rotation and translation) how to send commands to rotation (watch until it reaches the right angle,,
+//etc), adding more actions, blocking out (or clicking on ) obstacles
+//mix of actions to consider
+//draw/click on obstacles?
+
+int lower_red_lower_bound;
+int lower_red_upper_bound;
+int upper_red_lower_bound;
+int upper_red_upper_bound;
+
+Mat curr_frame;
+
+bool live = false;
+int numFrameChunk = 500;
+
+void on_trackbar( int, void* ){
+	redAndMoving(curr_frame);
+}
+
+
+static void setDst( int event, int x, int y, int f, void* ){
+	if  ( event == EVENT_LBUTTONDOWN ){
+		dst_flag = true;
+		Point pt = Point(x,y);
+		dst_pt = pt;
+	}
+
+}
+
 
 int main( int argc, char** argv ) {
 
 	cout << "hello world" << endl;
 
-	cap = VideoCapture(argv[6]); // open the video
-	double numFrames = cap.get(CV_CAP_PROP_FRAME_COUNT);
-	int num_col = resize_width;
-	int num_row = resize_height;
-	//data.create(numFrames, 1, CV_64F);
+	if (argc!=3){ //maybe use flag?
+		cout << "invalid args" << endl;
+		return -1;
+	}else{
+		if (atoi(argv[1]) == 1){
+			live = true;
 
-	x_plot= Mat::zeros( num_col, numFrames+1, CV_8UC3 );
-	y_plot = Mat::zeros( num_row, numFrames+1, CV_8UC3 );
-	th_plot = Mat::zeros( 360, numFrames+1, CV_8UC3 );
-	line(th_plot, Point(0,180), Point(numFrames, 180), Scalar(255, 255, 255), 1, CV_AA);
+		}else{
+			live = false;
+		}
+	}
+
+	if (live){
+		cap = VideoCapture(0);
+		dataMat = Mat(numFrameChunk, 4,  CV_64FC1);
+	}else{
+		cap = VideoCapture(argv[2]); // open the video
+		double numFrames = cap.get(CV_CAP_PROP_FRAME_COUNT);
+
+		dataMat = Mat(numFrames, 4,  CV_64FC1);
+	}
+
+	lower_red_lower_bound = 0;
+	lower_red_upper_bound = 15;
+	upper_red_lower_bound = 165;
+	upper_red_upper_bound = 179;
+
+	vector<double> weights = vector<double>();
+	for (int i=0; i<low_pass_length; i++){
+		weights.insert(weights.end(), 0.1);  //equal weights now***** TODO!!!!
+	}
+	weightsMat = Mat(weights, true);
+
+	 namedWindow(original_frame_window, 1);
+	 namedWindow(red_thresholded_window, 1);
+
+	 int const max_val = 255;
+	 createTrackbar( "lo red, lower bound", red_thresholded_window, &lower_red_lower_bound, max_val, on_trackbar );
+	 createTrackbar( "lo red, upper bound", red_thresholded_window, &lower_red_upper_bound,  max_val, on_trackbar );
+	 createTrackbar( "up red, lower bound", red_thresholded_window, &upper_red_lower_bound, max_val, on_trackbar );
+	 createTrackbar( "up red, upper bound", red_thresholded_window, &upper_red_upper_bound, max_val, on_trackbar );
 
 	if(!cap.isOpened())  // check if we succeeded
 		return -1;
+
+	setMouseCallback( original_frame_window, setDst, 0 );
 
 	/* loops through the video and processes the images.
 	 * there will be three windows:
 	 * 		1) binary frame that shows the motion of the robot.
 	 * 		2) thresholded frame by red
 	 * 		3) original frame with the contour and pca drawn */
-	Mat prev_frame;
-	int frameCounter = 0;
 	for(;;)
 	{
 		Mat frame;
 		cap >> frame;
+
 		if (frame.empty()) { //EOF
+			 exportToCSV(dataMat, "dataCSV.csv");
 					  break;
 		}
-		if (frameCounter != 0){
-			redAndMoving(frame, prev_frame);
+
+		/*if (frameCounter < 1300){
+			frameCounter++;
+			continue;
 		}
+		if (frameCounter == 1300){
+			waitKey(0);
+		}*/
+
+		resize(frame,frame,size);
+		curr_frame = frame;
+		image_orig = frame;
+
+		redAndMoving(frame); //threshold + axis drawing
+
+		drawGrids(frame, GRID_SIZE);
+		if (pt_flag && dst_flag && frameCounter % astarFrameCount == 0){
+			planPathOnVideo (frame, curr_pt, dst_pt, curr_angle, dst_angle);
+		}
+		imshow( original_frame_window, frame );
 
 		/* if key pressed is 'f', then will stop and show hsv values of that frame.
 		 * press any other key to quit that mode.
 		 * press other keys to exit the program. */
-		int res = waitKey(20);
+		int res = waitKey(10);
 		if (res % 256 == 102){
-			showImgWithHSV(frame);
+			showImgWithHSV(frame); //TODO when stop, show the picture with the axes on it
 		} else if(res >= 0) {
+			 exportToCSV(dataMat, "dataCSV.csv");
 			break;
 		}
 
 		frameCounter++;
-		frame.copyTo(prev_frame);
 	}
 
 	return 0;
 
 }
 
-/* processes the frame. prev_frame is used to find difference in frames to detect motion.
+
+/* processes the frame.
  * */
-void redAndMoving(Mat frame, Mat prev_frame){
-
-	resize(frame,frame,size);
-	resize(prev_frame,prev_frame,size);
-
-	Mat diffImg;
-	Mat diff_thresh;
-	Mat result;
-	Mat prev_frame_gray;
-	Mat frame_gray;
-	Mat prev_frame_blurred;
-	Mat frame_blurred;
-	Mat diff_gray;
-	Mat diff_blurred;
-
-	/* create a binary image that detects pixels that have moved between previous frame
-	 * and the current frame. */
-	GaussianBlur( frame, frame_blurred, Size( 3, 3 ), 0, 0 );
-	GaussianBlur( prev_frame, prev_frame_blurred, Size( 3, 3 ), 0, 0 );
-	absdiff(prev_frame_blurred, frame_blurred, diffImg);
-
-	cvtColor(diffImg, diff_gray, CV_RGB2GRAY);
-	GaussianBlur( diff_gray, diff_blurred, Size( 3, 3 ), 0, 0 );
-	threshold( diff_blurred, diff_thresh, 20, 255, THRESH_BINARY );
-
-	/* dilate the motion image to fill 'holes'*/
-	int dilation_type = MORPH_RECT;
-	int dilation_size = 1;
-
-	Mat element_diff = getStructuringElement( dilation_type,
-									   Size( 2*dilation_size + 1, 2*dilation_size+1 ),
-									   Point( dilation_size, dilation_size ) );
-	dilate(diff_thresh, result, element_diff);
-	imshow("motion frames", result);
+void redAndMoving(Mat frame){
 
 	/* creates binary image that is a result of
 	 * thresholding the original image by red hues. */
-	image_orig = frame;
 	Mat image_blurred;
 	Mat image_threshed;
 	Mat image_final;
 
 	blurImg(image_orig, image_blurred, blur_kernel_length);
 	thresholdImgByHSV(image_blurred, image_threshed);
-	dilation_type = MORPH_ELLIPSE;
-	dilation_size = 2;
+	int dilation_type = MORPH_ELLIPSE;
+	int dilation_size = 2;
 
 	Mat element_thresh = getStructuringElement( dilation_type,
 									   Size( 2*dilation_size + 1, 2*dilation_size+1 ),
 									   Point( dilation_size, dilation_size ) );
 	dilate(image_threshed, image_final, element_thresh);
-	imshow("thresholded by red frames", image_final);
+	imshow(red_thresholded_window, image_final);
 
 	/* find and draw contours on the original image,
 	 * given the thresholded image*/
-	findAndDrawContours (image_final);
-	imshow( window_name, image_orig );
+	findAndDrawContours (image_final, frame);
+
+}
+
+void exportToCSV(Mat &matrix, string filename){
+
+	std::ofstream outputFile(filename);
+	outputFile << format(matrix, "CSV") << endl;
+	outputFile.close();
 
 }
 
@@ -196,68 +260,214 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
         eigen_val[i] = pca_analysis.eigenvalues.at<double>(0, i);
     }
 
-    /* draw the principal components */
-    circle(img, cntr, 3, Scalar(255, 0, 255), 2);
-    Point p1 = cntr + 0.02 * Point(static_cast<int>(eigen_vecs[0].x * eigen_val[0]), static_cast<int>(eigen_vecs[0].y * eigen_val[0]));
-    line(img, cntr, p1, Scalar(0, 255, 0), 1, CV_AA); //principal axis
-    Point p2 = cntr - 0.08 *Point(static_cast<int>(eigen_vecs[1].x * eigen_val[1]), static_cast<int>(eigen_vecs[1].y * eigen_val[1]));
-    line(img, cntr, p2, Scalar(255, 255, 0), 1, CV_AA); //second principal axis
+    //to make the axis point to some consistent direction, cast the signs explicitly
+    //eigen_vecs[0].y = eigen_vecs[0].y > 0 ? -eigen_vecs[0].y : eigen_vecs[0].y; //y neg x pos
+    //eigen_vecs[0].x = eigen_vecs[0].x > 0 ? eigen_vecs[0].x : -eigen_vecs[0].x;
+    //eigen_vecs[1].y = eigen_vecs[1].y > 0 ? eigen_vecs[1].y : -eigen_vecs[1].y; //y pos, x pos
+    //eigen_vecs[1].x = eigen_vecs[1].x > 0 ? eigen_vecs[1].x : -eigen_vecs[1].x;
 
     double angle = atan2(eigen_vecs[0].y, eigen_vecs[0].x); // orientation in radians
+    double angle2 = atan2(eigen_vecs[1].y, eigen_vecs[1].x); //angle of our second principal axis
 
-    plotAxis (cntr, angle);
+   // cout << angle << " " << angle2 << endl;
+
+    //axis might jump around. add pi to angles that are about opposite from previous angles explicitly
+    if (thData.size() != 0){
+
+    	double prev_val =  thData.at(thData.size()-1) - 2*M_PI;
+    	double bounds = M_PI/2;
+
+    	//first quad
+    	if (prev_val >= 0 && prev_val <= M_PI/2){
+    		if (angle <= 0 && angle > prev_val-bounds){
+    			//within bounds
+    		}else if (angle > 0 && angle < prev_val + bounds){
+    			//within bounds
+    		}else{
+    			angle = angle + M_PI;
+    		}
+    	}
+
+    	//second quad
+    	if (prev_val > M_PI/2 && prev_val <= M_PI){
+			if (angle <= 0 && angle < prev_val + bounds - 2*M_PI){
+				//within bounds
+			}else if (angle > 0 && angle > prev_val - bounds){
+				//within bounds
+			}else{
+				angle = angle + M_PI;
+			}
+		}
+
+    	//fourth quad
+		if (prev_val < 0 && prev_val >= -M_PI/2){
+			if (angle <= 0 && angle > prev_val - bounds){
+				//within bounds
+			}else if (angle > 0 && angle < prev_val + bounds){
+				//within bounds
+			}else{
+			//	cout << "angle changed4!! " << angle << endl;
+				angle = angle + M_PI;
+				//cout << "				 to " << angle << endl;
+			}
+		}
+
+		//third quad
+		if (prev_val < -M_PI/2 && prev_val >= -M_PI){
+			if (angle >= 0 && angle > prev_val - bounds + 2*M_PI){
+				//within bounds
+			}else if (angle < 0 && angle < prev_val + bounds){
+				//within bounds
+			}else{
+				//cout << "angle changed3!! " << angle << endl;
+				angle = angle + M_PI;
+				//cout << "				 to " << angle << endl;
+			}
+		}
+
+    	/*double tempPrev = thData.at(thData.size()-1) - 2*M_PI;
+    	double temp = angle; //these in -180 to 180
+
+    	//if (tempPrev < -M_PI/2)
+    	if (angle > 0){
+    		temp = angle - 2*M_PI;
+    	}else{
+    		temp = angle - 2*M_PI;
+    	}
+
+    	if (tempPrev+M_PI/2)
+    	angle = angle+M_PI;*/
+    }
+
+    if (th2Data.size() != 0){
+
+      	double prev_val =  th2Data.at(th2Data.size()-1) - 2*M_PI;
+      	double bounds = M_PI/2;
+
+      	//first quad
+      	if (prev_val >= 0 && prev_val <= M_PI/2){
+      		if (angle2 <= 0 && angle2 > prev_val-bounds){
+      			//within bounds
+      		}else if (angle2 > 0 && angle2 < prev_val + bounds){
+      			//within bounds
+      		}else{
+      			//cout << "angle2 changed1!! " << angle2 << endl;
+      			angle2 = angle2 + M_PI;
+      			//cout << "				 to " << angle2 << endl;
+      		}
+      	}
+
+      	//second quad
+      	if (prev_val > M_PI/2 && prev_val <= M_PI){
+  			if (angle2 <= 0 && angle2 < prev_val + bounds - 2*M_PI){
+  				//within bounds
+  			}else if (angle2 > 0 && angle2 > prev_val - bounds){
+  				//within bounds
+  			}else{
+  				//cout << "angle2 changed2!! " << angle2 << endl;
+  				angle2 = angle2 + M_PI;
+  				//cout << "				 to " << angle2 << endl;
+  			}
+  		}
+
+      	//fourth quad
+  		if (prev_val < 0 && prev_val >= -M_PI/2){
+  			if (angle2 <= 0 && angle2 > prev_val - bounds){
+  				//within bounds
+  			}else if (angle2 > 0 && angle2 < prev_val + bounds){
+  				//within bounds
+  			}else{
+  				//cout << "angle2 changed4!! " << angle2 << endl;
+  				angle2 = angle2 + M_PI;
+  				//cout << "				 to " << angle2 << endl;
+  			}
+  		}
+
+  		//third quad
+  		if (prev_val < -M_PI/2 && prev_val >= -M_PI){
+  			if (angle2 >= 0 && angle2 > prev_val - bounds + 2*M_PI){
+  				//within bounds
+  			}else if (angle2 < 0 && angle2 < prev_val + bounds){
+  				//within bounds
+  			}else{
+  				angle2 = angle2 + M_PI;
+  			}
+  		}
+      }
+
+
+    /* [-180, 180] normalization for angles */
+    angle = fmod(angle + M_PI,2*M_PI);
+	if (angle < 0)
+		angle += 2*M_PI;
+	angle =  angle - M_PI;
+
+	angle2 = fmod(angle2 + M_PI,2*M_PI);
+	if (angle2 < 0)
+		angle2 += 2*M_PI;
+	angle2 =  angle2 - M_PI;
+
+	/* record data */
+    if (dataMat.rows <= frameCounter){
+    	Mat temp;
+    	copyMakeBorder(dataMat, temp, 0, numFrameChunk, 0, 0, BORDER_CONSTANT, 0 );
+    	dataMat = temp;
+    }
+    dataMat.at <double> (frameCounter, 0) = cntr.x;
+    dataMat.at <double>(frameCounter, 1) = cntr.y;
+    dataMat.at <double> (frameCounter, 2) = angle; // radians
+    dataMat.at <double> (frameCounter, 3) = angle * 180/M_PI; //degrees
+
+    /* low pass filter */
+    if (xData.size() < low_pass_length){
+    		xData.insert(xData.end(), cntr.x);
+    		yData.insert(yData.end(), cntr.y);
+    		thData.insert(thData.end(), angle + 2*M_PI);
+    		th2Data.insert(th2Data.end(), angle2 + 2*M_PI);
+    } else{
+
+    		pt_flag = true;
+
+    		xData.erase(xData.begin());
+    		yData.erase(yData.begin());
+    		thData.erase(thData.begin());
+    		th2Data.erase(th2Data.begin());
+    		xData.insert(xData.end(), cntr.x);
+    		yData.insert(yData.end(), cntr.y);
+    		thData.insert(thData.end(), angle + 2*M_PI);
+    		th2Data.insert(th2Data.end(), angle2 + 2*M_PI);
+
+    		double avg_x = weightsMat.dot(Mat(xData,true));
+    		double avg_y = weightsMat.dot(Mat(yData,true));
+    		double avg_th = weightsMat.dot(Mat(thData,true));
+    		double avg_th2 = weightsMat.dot(Mat(th2Data,true));
+
+    		cntr = Point(avg_x, avg_y);
+    		curr_pt = Point(avg_x, avg_y);
+    		angle = avg_th;
+    		curr_angle = angle;
+    		angle2 = avg_th2;
+
+    		 /* draw the principal components */
+			circle(img, cntr, 3, Scalar(255, 0, 255), 2);
+			Point p1 = cntr + 0.02 * Point(static_cast<int>(cos(angle) * eigen_val[0]), static_cast<int>(sin(angle) * eigen_val[0]));
+			line(img, cntr, p1, Scalar(0, 255, 0), 1, CV_AA); //principal axis - green axis
+			Point p2 = cntr - 0.12 *Point(static_cast<int>(cos(angle2) * eigen_val[1]), static_cast<int>(sin(angle2) * eigen_val[1]));
+			line(img, cntr, p2, Scalar(255, 255, 0), 1, CV_AA); //second principal axis
+
+    }
 
     return angle;
 }
 
-/* plots center and angle of the axes on one window */
-void plotAxis(Point cntr, double angle){
-	//TODO: do time instead of frame no?? *.*
-
-	if (xyData.empty()){
-		xyData.insert(xyData.end(), cntr);
-		thData.insert(thData.end(), angle);
-
-		imshow( x_window, x_plot );
-		imshow( y_window, y_plot );
-		imshow( th_window, th_plot );
-		return;
-	}
-
-	Point prevPoint = xyData.back();
-	double prevAngle = thData.back();
-
-	/* inverted y and changed th to degrees just for easy visualization */
-	Point prevX = Point(frame_no, prevPoint.x);
-	Point prevY = Point(frame_no, resize_height-prevPoint.y);
-	Point prevTh = Point(frame_no, 180 - prevAngle*180/M_PI);
-	frame_no++;
-	Point currX = Point(frame_no, cntr.x);
-	Point currY = Point(frame_no, resize_height-cntr.y);
-	Point currTh = Point(frame_no, 180 - angle*180/M_PI);
-
-	line(x_plot, prevX, currX, Scalar(255, 255, 255), 1, CV_AA);
-	line(y_plot, prevY, currY, Scalar(255, 255, 255), 1, CV_AA);
-	line(th_plot, prevTh, currTh, Scalar(255, 255, 255), 1, CV_AA);
-	//line(img, cntr, p2, Scalar(255, 255, 255), 1, CV_AA);
-
-	xyData.insert(xyData.end(), cntr);
-	thData.insert(thData.end(), angle);
-
-	imshow( x_window, x_plot );
-	imshow( y_window, y_plot );
-	imshow( th_window, th_plot );
-}
-
-//TODO: maybe only do this after doing normal contour finding and num contours not 1?
 /* finds and draws contour of the snake on the original image given the thresholded image.
  * if the snake is not 'found' yet, then will simply draw out all 'candidate' snakes on the image
  * otherwise, will use the previously defined snake to find the most matching snake. */
-int findAndDrawContours (Mat img_bw){
+int findAndDrawContours (Mat img_bw, Mat& img_orig){
 
-		double area_lower_bound = 1e3;
-		double area_upper_bound = 1e10;
-	    if (!prev_snake.empty()){
+		//double area_lower_bound = 5e3;
+		//double area_upper_bound = 1e10;
+	/*    if (!prev_snake.empty()){
 	    	// if previous snake is defined,
 	    	//find a bounding box for the prev_snake and bloat it to account for some movement
 	    	//mask the image using the box and find the contours only within that area
@@ -265,7 +475,7 @@ int findAndDrawContours (Mat img_bw){
 	    	area_lower_bound = 1e2;
 
 			int scale = 1;
-			int bloat_amount = 10; //TODO: way to calculate good bloat amount using scale, size of orig img??
+			int bloat_amount = 10;
 
 			Rect box = boundingRect(prev_snake);
 			//x,y is top, left
@@ -282,92 +492,52 @@ int findAndDrawContours (Mat img_bw){
 			bitwise_and(mask, img_bw, image_masked);
 			img_bw = image_masked;
 	    }
+	    */
 
 	    // Find all the contours in the result image
 		vector<Vec4i> hierarchy;
 		vector<vector<Point> > contours;
 		findContours(img_bw, contours, hierarchy, CV_RETR_LIST, CV_CHAIN_APPROX_NONE);
 
-	    vector<int> candidates = vector<int>();
+		int max_idx = -1;
+		double max_area = 0;
 	    for (size_t i = 0; i < contours.size(); ++i)
 	    {
 	        // Calculate the area of each contour
 	        double area = contourArea(contours[i]);
 
 	        // Ignore contours that are too small or too large
-	        if (area < area_lower_bound || area_upper_bound < area) continue;
+	     //   if (area < area_lower_bound || area_upper_bound < area) continue;
 
-	        candidates.insert(candidates.end(), i);
+	        if (max_idx == -1){
+	        	max_area = area;
+	        	max_idx = i;
+	        }else if (area > max_area){
+	        	max_idx = i;
+	        	max_area = area;
+	        }
+
 	    }
 
-	    // if previous snake is not defined, and we have none or multiple candidates,
-	    // then we just draw all candidates until we find the snake
-	    if (prev_snake.empty() && candidates.size()!=1){
-				//TODO: what should i do? more robust needed
-
-			//just draw all the viable candidates out
-			for (size_t i = 0; i < candidates.size(); ++i)
-			{
-
-				int candidate_idx = candidates[i];
-				// Draw each contour only for visualisation purposes
-				drawContours(image_orig, contours, static_cast<int>(candidate_idx), Scalar(0, 0, 255), 2, 8, hierarchy, 0);
-				// Find the orientation of each shape
-				getOrientation(contours[candidate_idx], image_orig);
-			}
-	    }
-	   else{
-
-			vector<Point> snakes = vector<Point>();
-			for (size_t i = 0; i < candidates.size(); ++i) { //loop through all the candidates
-				int candidate_idx = candidates[i];
-				drawContours(image_orig, contours, static_cast<int>(candidate_idx), Scalar(0, 0, 255), 2, 8, hierarchy, 0);
-				snakes.insert(snakes.end(), contours[candidate_idx].begin(), contours[candidate_idx].end());
-				//}//TODO: what if the snake is merged with another red stuff??/ ++maybe consider prev prev snake
-			}
-			getOrientation(snakes, image_orig);
-			prev_snake = snakes;
+	    if (max_idx != -1){
+	    	drawContours(img_orig, contours, static_cast<int>(max_idx), Scalar(0, 0, 255), 2, 8, hierarchy, 0);
+	    	getOrientation(contours[max_idx], img_orig);
 	    }
 
 	    return 0;
 }
-
-/*
-int countOverlaps(vector<Point> candidate, vector<Point>& result){
-
-
-	Mat mean;
-	reduce(candidate, mean, 0, CV_REDUCE_AVG, -1);
-	Point mean_pt(mean.at<float>(0,0), mean.at<float>(0,1));
-
-	if (find(prev_snake.begin(), prev_snake.end(), mean_pt) != prev_snake.end()){ //found the mean in prev snake
-		return 1;
-	}
-	return 0;
-
-
-	int counter = 0;
-
-	for (size_t i = 0; i < candidate.size(); ++i){
-		if (find(prev_snake.begin(), prev_snake.end(), candidate[i]) != prev_snake.end()){
-			counter++;
-		}
-		//TODO: also find the intersection of those and then also add candidate pixels that are not "far away" from those
-	}
-
-	return counter;
-
-}*/
 
 /* event-based onMouse function that will show the hsv values of the pixel
  * that the mouse is hovering on */
 static void onMouse( int event, int x, int y, int f, void* ){
 	Mat image = image_orig.clone();
 
-	Mat HSV_1;
+	//Mat HSV_1;
 	Mat HSV;
-	cvtColor(image, HSV_1,CV_BGR2HSV);
-	medianBlur ( HSV_1, HSV,  blur_kernel_length);
+	blurImg(image, HSV, blur_kernel_length);
+
+	//cvtColor(image, HSV_1,CV_BGR2HSV);
+	//medianBlur ( HSV_1, HSV,  );
 
     Vec3b hsv=HSV.at<Vec3b>(y,x);
     int H=hsv.val[0];
@@ -390,91 +560,17 @@ static void onMouse( int event, int x, int y, int f, void* ){
     sprintf(name,"Y=%d",y);
     putText(HSV,name, Point(25,340) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
 
-	imshow( window_name, HSV );
+	imshow( original_frame_window, HSV );
 }
 
-static void onMouseX( int event, int x, int y, int f, void* ){
-
-	Mat x_plot_copy = x_plot.clone();
-
-    char name[30];
-    sprintf(name,"frame number=%d",x);
-    putText(x_plot_copy,name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,255,0), 2,8,false );
-
-    int coord = -1;
-	try{
-		coord = xyData.at(x).x;
-	} catch (std::out_of_range){
-		coord = -1;
-	}
-    sprintf(name,"X=%d",coord);
-    putText(x_plot_copy,name, Point(25,300) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
-
-	imshow( x_window, x_plot_copy );
-}
-
-/* event-based onMouse function that will show the hsv values of the pixel
- * that the mouse is hovering on */
-static void onMouseY( int event, int x, int y, int f, void* ){
-
-	Mat y_plot_copy = y_plot.clone();
-
-	char name[30];
-	sprintf(name,"frame number=%d",x);
-	putText(y_plot_copy,name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,255,0), 2,8,false );
-
-	int coord = -1;
-	try{
-		coord = xyData.at(x).y;
-	} catch (std::out_of_range){
-		coord = -1;
-	}
-	sprintf(name,"Y=%d", coord);
-	putText(y_plot_copy,name, Point(25,300) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
-
-	imshow( y_window, y_plot_copy );
-}
-
-static void onMouseTh( int event, int x, int y, int f, void* ){
-
-	Mat th_plot_copy = th_plot.clone();
-
-	char name[30];
-	sprintf(name,"frame number=%d",x);
-	putText(th_plot_copy,name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,255,0), 2,8,false );
-
-	double coord = -1;
-	try{
-		coord = thData.at(x);
-
-		sprintf(name,"Th=%f rads", coord);
-		putText(th_plot_copy,name, Point(25,300) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
-
-		sprintf(name,"Th=%f degs", coord*180/M_PI);
-		putText(th_plot_copy,name, Point(25,350) , FONT_HERSHEY_SIMPLEX, .7, Scalar(0,0,255), 2,8,false );
-
-	} catch (std::out_of_range){
-		//coord = -1;
-	}
-
-	imshow( th_window, th_plot_copy );
-}
 
 /* shows the hsv image where mouse location will tell the pixel value
  * press a key to exit */
 int showImgWithHSV(Mat image){
 
-	Mat dst;
-	resize(image, dst, size);
-
-	setMouseCallback( window_name, onMouse, 0 );
-	setMouseCallback( x_window, onMouseX, 0 );
-	setMouseCallback( y_window, onMouseY, 0 );
-	setMouseCallback( th_window, onMouseTh, 0 );
-	imshow(window_name, dst);
-	imshow(x_window, x_plot);
-	imshow(y_window, y_plot);
-	imshow(th_window, th_plot);
+	Mat image2 = image.clone();
+	setMouseCallback( original_frame_window, onMouse, 0 );
+	imshow(original_frame_window, image2);
 
 	waitKey(0);
 
@@ -483,14 +579,11 @@ int showImgWithHSV(Mat image){
 
 /* blurs the source image and stores in dst image. currently using median blur
  * 		i - the kernel size of the operation */
-int blurImg(Mat& src, Mat& dst, int i){
+int blurImg(Mat& src, Mat& dst, int kernel_size){
 
 	Mat src_hsv;
 	cvtColor(src, src_hsv, CV_BGR2HSV);
-	medianBlur ( src_hsv, dst, i );
-	//GaussianBlur( src, dst, Size( i, i ), 0, 0 );
-	//   	   blur( src, dst, Size( i, i ), Point(-1,-1) );
-	//	 bilateralFilter ( src, dst, i, i*2, i/2 );
+	medianBlur ( src_hsv, dst, kernel_size );
 
 	return 0;
 }
@@ -501,8 +594,8 @@ int thresholdImgByHSV (Mat& src, Mat& dst) {
 	Mat lower_red;
 	Mat upper_red;
 
-	inRange(src, Scalar(0, 50, 50), Scalar(15, 150, 150), lower_red);
-	inRange(src, Scalar(165, 30, 30), Scalar(179, 255, 255), upper_red);
+	inRange(src, Scalar(lower_red_lower_bound, 50, 50), Scalar(lower_red_upper_bound, 150, 150), lower_red);
+	inRange(src, Scalar(upper_red_lower_bound, 30, 30), Scalar(upper_red_upper_bound, 255, 255), upper_red);
 
 	bitwise_or(lower_red, upper_red, dst);
 
