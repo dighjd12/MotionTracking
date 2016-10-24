@@ -134,7 +134,7 @@ int main( int argc, char** argv ) {
 
 	 int const max_val = 255;
 	 createTrackbar( "lo red, lower bound", red_thresholded_window, &lower_red_lower_bound, max_val, on_trackbar );
-	 createTrackbar( "lo red, upper bound", red_thresholded_window, &lower_red_upper_bound,  max_val, on_trackbar );
+	 createTrackbar( "lo red, upper bound", red_thresholded_window, &lower_red_upper_bound, max_val, on_trackbar );
 	 createTrackbar( "up red, lower bound", red_thresholded_window, &upper_red_lower_bound, max_val, on_trackbar );
 	 createTrackbar( "up red, upper bound", red_thresholded_window, &upper_red_upper_bound, max_val, on_trackbar );
 
@@ -176,6 +176,7 @@ int main( int argc, char** argv ) {
 		if (pt_flag && dst_flag && frameCounter % astarFrameCount == 0){
 			planPathOnVideo (frame, curr_pt, dst_pt, curr_angle, dst_angle);
 		}
+		drawPath();
 		imshow( original_frame_window, frame );
 
 		/* if key pressed is 'f', then will stop and show hsv values of that frame.

@@ -36,6 +36,7 @@ namespace AStar{
 	Point3f dst;
 	double angle;
 
+	vector<node> current_path;
 	vector<Point3f> visited_set;
 
 	action roll, rotate, forward;
@@ -43,7 +44,7 @@ namespace AStar{
 	vector<node*> pq;
 
 	Mat img;
-	Mat overlay_img;
+	//Mat overlay_img;
 
 	//install actions and fill in moves
 	static void makeActions(){
@@ -82,7 +83,7 @@ namespace AStar{
 
 	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle){
 
-		overlay_img = Mat(image.size, CV_64FC1);
+		//overlay_img = Mat(image.size, CV_64FC1);
 
 
 		final_angle = dst_angle;
@@ -124,6 +125,20 @@ namespace AStar{
 
 	}
 
+	void freePtrs(){
+
+		if (!pq.empty()){
+			for (int i=0; i<pq.size(); i++){
+				
+			}
+		}
+
+		if (!current_path.empty()){
+
+		}
+
+	}
+
 
 	void planPath(Point src_pt, Point dst_pt, double curr_angle){
 
@@ -158,10 +173,13 @@ namespace AStar{
 
 						//print the pt/action or store in array
 						path.insert(path.begin(), *n);
-						n = n->prev;
+						node *temp = n->prev;
+						//delete n;
+						n = temp;
 					}
 
-					drawPath(path);
+					current_path = path;
+					//drawPath(path);
 					return;
 
 			}
@@ -179,15 +197,15 @@ namespace AStar{
 						if (isValid(n->pos, candidates[j]) && !visited(candidates[j])){ //detect obstacle using this method, isValid! TODO
 
 							node *new_node = new node;
-							 new_node->dist = n->dist + actions[i].cost(n->pos, candidates[j]);
-							 new_node->priority = new_node->dist + heuristics(candidates[j]);
-							 new_node->pos = candidates[j];
+							new_node->dist = n->dist + actions[i].cost(n->pos, candidates[j]);
+							new_node->priority = new_node->dist + heuristics(candidates[j]);
+							new_node->pos = candidates[j];
 
-							 new_node->prev = n;
-							 new_node->move = actions[i];
+							new_node->prev = n;
+							new_node->move = actions[i];
 
 							insertPQ(new_node);
-							checkPQ();
+							//checkPQ();
 						}
 					}
 				}
@@ -195,20 +213,25 @@ namespace AStar{
 		}
 	}
 
-	void drawPath(vector<node> path){
+	void drawPath(){
+
+		if (current_path.empty()) return;
+		vector<node> path = current_path;
 
 		for (int j = 0; j < path.size()-1; j++){
 
+			line(image_orig, Point(path[j].pos.x, path[j].pos.y), Point(path[j+1].pos.x, path[j+1].pos.y), Scalar(0, 255, 0), 1, CV_AA);
+/*
 			if (path[j].pos.x == path[j+1].pos.x && path[j].pos.y == path[j+1].pos.y){
 				//rotation
-				cout << "?" << endl; //??????? three rotation and a diagonal ???????????
+				//cout << "?" << endl; //??????? three rotation and a diagonal ???????????
 				circle(image_orig, Point(path[j].pos.x, path[j].pos.y), 3, Scalar(255, 0, 255), 2);
 				char name[50];
 				sprintf(name,"rotate %.2f", path[j+1].pos.z - path[j].pos.z);
 				putText(image_orig, name, Point(path[j].pos.x, path[j].pos.y-5), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,0,255), 2,8,false );
 			}else{
 				line(image_orig, Point(path[j].pos.x, path[j].pos.y), Point(path[j+1].pos.x, path[j+1].pos.y), Scalar(0, 255, 0), 1, CV_AA);
-			}
+			}*/
 		}
 
 	}

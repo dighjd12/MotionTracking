@@ -45,7 +45,7 @@ struct node{
 	double rotate_cost (Point3f start, Point3f end);
 	double heuristics(Point3f curr);
 	double euclidean_dist(Point3f start, Point3f end);
-	void drawPath(vector<node> path);
+	void drawPath();
 	void insertVisited(Point3f pt);
 	bool visited(Point3f pt);
 	bool isValid (Point3f start, Point3f end);
