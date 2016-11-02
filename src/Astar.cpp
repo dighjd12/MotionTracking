@@ -19,7 +19,7 @@ namespace AStar{
 	double final_angle = M_PI/2; //TODO make this user-specified
 
 	// overlay transparent image and draw on it!!
-	// rotation + final dst angle* bugg......
+	// rotation + final dst angle* bug......
 	// TODO log the sequence of actions + astar every 10 frame*****
 	//docs + interface/ highlight major parts
 
@@ -30,25 +30,114 @@ namespace AStar{
 
 	// implement on the snake .. order rotation + cost for motions/actions
 	// simulations ? testing
-	//c++ 11
 
 	Point3f src;
 	Point3f dst;
 	double angle;
 
-	vector<node> current_path;
+	vector<Node> current_path;
 	vector<Point3f> visited_set;
 
-	action roll, rotate, forward;
-	action actions[3];
-	vector<node*> pq;
+//	action roll, rotate, forward;
+	//action actions[3];
+	Action *actions[2];
+	vector<Node> pq;
 
 	Mat img;
 	//Mat overlay_img;
 
 	//install actions and fill in moves
-	static void makeActions(){
+	/* instantiate the action sets of the robot
+	*/
 
+class Roll: public Action {
+   public:
+      	double cost (Point3f start, Point3f end){
+			return 1;//euclidean_dist(start, end);
+		}
+		vector<Point3f> succ (Point3f curr){ //orientation head of our snake (rad)
+
+			Point3f p1 = Point3f(curr.x + 3/2*GRID_SIZE*cos(curr.z+M_PI/2), curr.y + 3/2*GRID_SIZE*sin(curr.z+M_PI/2), curr.z);
+			Point3f p2 = Point3f(curr.x + 3/2*GRID_SIZE*cos(curr.z-M_PI/2), curr.y + 3/2*GRID_SIZE*sin(curr.z-M_PI/2), curr.z);
+			roundToGridPoint(p1, GRID_SIZE);
+			roundToGridPoint(p2, GRID_SIZE);
+			vector<Point3f> v1 = vector<Point3f>();
+			v1.insert(v1.begin(), p1);
+			v1.insert(v1.begin(), p2);
+			return v1;
+		}
+};
+
+class Forward: public Action {
+   public:
+      	double forward_cost (Point3f start, Point3f end){
+			return 1;//euclidean_dist(start, end);
+		}
+		vector<Point3f> succ (Point3f curr){
+
+			Point3f p1 = Point3f(curr.x + 3/2*GRID_SIZE*cos(curr.z), curr.y +3/2*GRID_SIZE*sin(curr.z), curr.z);
+			Point3f p2 = Point3f(curr.x + 3/2*GRID_SIZE*cos(curr.z+M_PI), curr.y +3/2*GRID_SIZE*sin(curr.z+M_PI), curr.z);
+			roundToGridPoint(p1, GRID_SIZE);
+			roundToGridPoint(p2, GRID_SIZE);
+			vector<Point3f> v1 = vector<Point3f>();
+			v1.insert(v1.begin(), p1);
+			v1.insert(v1.begin(), p2);
+			return v1;
+		}
+};
+
+class Rotate: public Action {
+   	public:
+      	double cost (Point3f start, Point3f end){
+			return 1;
+		}
+		vector<Point3f> succ (Point3f curr){ //TODO: currently only 4-way connected, assuming th is aligned with one of the axes.
+
+			//cout << "here is called!" << endl;
+
+			double angle = curr.z + M_PI/2;
+			angle = fmod(angle + M_PI,2*M_PI);
+			if (angle < 0)
+				angle += 2*M_PI;
+			angle =  angle - M_PI;
+			Point3f p1 = Point3f(curr.x, curr.y, angle);
+
+			angle = curr.z - M_PI/2;
+			angle = fmod(angle + M_PI,2*M_PI);
+			if (angle < 0)
+				angle += 2*M_PI;
+			angle =  angle - M_PI;
+			Point3f p2 = Point3f(curr.x, curr.y, angle);
+
+			angle = curr.z + M_PI;
+			angle = fmod(angle + M_PI,2*M_PI);
+			if (angle < 0)
+				angle += 2*M_PI;
+			angle =  angle - M_PI;
+			Point3f p3 = Point3f(curr.x, curr.y, angle);
+
+			angle = curr.z - M_PI;
+			angle = fmod(angle + M_PI,2*M_PI);
+			if (angle < 0)
+				angle += 2*M_PI;
+			angle =  angle - M_PI;
+			Point3f p4 = Point3f(curr.x, curr.y, angle);
+
+			roundToGridPoint(p1, GRID_SIZE);
+			roundToGridPoint(p2, GRID_SIZE);
+			roundToGridPoint(p3, GRID_SIZE);
+			roundToGridPoint(p4, GRID_SIZE);
+			vector<Point3f> v1 = vector<Point3f>();
+			v1.insert(v1.begin(), p1);
+			v1.insert(v1.begin(), p2);
+			v1.insert(v1.begin(), p3);
+			v1.insert(v1.begin(), p4);
+			return v1;
+		}
+};
+
+	static void makeActions(){
+/*
 		action roll;
 		action forward;
 		action rotate;
@@ -61,10 +150,13 @@ namespace AStar{
 
 		actions[0] = roll;
 		actions[1] = forward;
-		actions[2] = rotate;
+		actions[2] = rotate;*/
+
+		
 
 	}
 
+	/* draw the grid on the image */
 	void drawGrids(Mat &image, int grid_size){
 
 		img = image;
@@ -81,10 +173,10 @@ namespace AStar{
 
 	}
 
+	/* plan path on the image given the source and destination, put the planning information */
 	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle){
 
 		//overlay_img = Mat(image.size, CV_64FC1);
-
 
 		final_angle = dst_angle;
 
@@ -94,7 +186,8 @@ namespace AStar{
 		double curr_angle2 = 0;//((curr_angle + (M_PI/2-1)) / (M_PI/2)) * (M_PI/2); //rounds to multiple of pi/2
 
 		char name[100];
-		sprintf(name,"source is: x=%d, y=%d, th=%.2f. destination is: x=%d, y=%d, th=%.2f.", src_pt.x, src_pt.y, curr_angle, dst_pt.x, dst_pt.y, dst_angle);
+		sprintf(name,"source is: x=%d, y=%d, th=%.2f. destination is: x=%d, y=%d, th=%.2f.", 
+			src_pt.x, src_pt.y, curr_angle, dst_pt.x, dst_pt.y, dst_angle);
 		putText(image, name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
 
 		planPath (src_pt, dst_pt, curr_angle2);
@@ -102,7 +195,7 @@ namespace AStar{
 
 	}
 
-
+	/* given the point, round the point to the grid point */
 	void roundToGridPoint(Point &pt, int grid_size){
 
 		//rounds down
@@ -114,6 +207,7 @@ namespace AStar{
 
 	}
 
+	/* given the point, round the point to the grid point */
 	void roundToGridPoint(Point3f &pt, int grid_size){
 
 		//rounds down
@@ -125,6 +219,7 @@ namespace AStar{
 
 	}
 
+	/* free node pointers used in the path planning */
 	void freePtrs(){
 
 		if (!pq.empty()){
@@ -139,70 +234,82 @@ namespace AStar{
 
 	}
 
-
+	/* run the astar on the graph */
 	void planPath(Point src_pt, Point dst_pt, double curr_angle){
 
 		src = Point3f(src_pt.x, src_pt.y, curr_angle);
 		dst = Point3f(dst_pt.x, dst_pt.y, curr_angle);
 		angle = curr_angle; //start angle
 		visited_set = vector<Point3f>();
-		pq = vector<node *>();
+		pq = vector<Node>();
 
 		//do the astar
-		makeActions();
+		Roll roll;
+		Rotate rotate;
+		Forward forward;
+
+		actions[0] = &roll;
+		//actions[1] = &rotate;
+		actions[1] = &forward;
 
 		//TODO be able to tell if dst is reachable from src
-		node *start_node = new node;
-		start_node->priority = 0;
+		Node start_node(0, 0, Point3f(src_pt.x, src_pt.y, curr_angle),
+      			0, nullptr, (*actions[0])); //action is arbitrarily chosen!
+
+		/*start_node->priority = 0;
 		start_node->dist = 0;
-		start_node->pos = Point3f(src_pt.x, src_pt.y, curr_angle);
-		start_node->prev = nullptr;
+		start_node->pos = ;
+		start_node->prev = nullptr;*/
 		//move is undefined!
 		insertPQ(start_node);
 
 		while (!pq.empty()){
 
-			node *n = delminPQ();
+			Node n = delminPQ();
+			cout << "node: (" << n.pos.x << "," << n.pos.y << ")" << endl;
 
-			if (n->pos.x == dst_pt.x && n->pos.y == dst_pt.y && n->pos.z > final_angle-M_PI/6 && n->pos.z < final_angle+M_PI/6){ //TODO bounds check by quadrants!
+			if (n.pos.x == dst_pt.x && n.pos.y == dst_pt.y 
+				&& n.pos.z > final_angle-M_PI/6 && n.pos.z < final_angle+M_PI/6){ //TODO bounds check by quadrants!
 
 				cout << "done astar" << endl;
+				//return;
+					vector<Node> path = vector<Node>();
+					Node *pathnode = &n;
+					while (pathnode != nullptr){
 
-					vector<node> path = vector<node>();
-					while (n != nullptr){
-
+						cout << "path!: (" << (*pathnode).pos.x << "," << (*pathnode).pos.y <<"," <<(*pathnode).pos.z <<  ")" << endl;
 						//print the pt/action or store in array
-						path.insert(path.begin(), *n);
-						node *temp = n->prev;
+						path.insert(path.begin(), *pathnode);
+						//node *temp = n->prev;
 						//delete n;
-						n = temp;
+						pathnode = pathnode->prev;
 					}
 
 					current_path = path;
+					//freePtrs();
 					//drawPath(path);
 					return;
 
 			}
 
-			if (!visited(n->pos)){
+			if (!visited(n.pos)){
 
-				insertVisited(n->pos);
+				insertVisited(n.pos);
+
 				//expand
 				for (int i=0; i<(sizeof(actions)/sizeof(*actions)); i++){
-
-					vector<Point3f> candidates  = actions[i].succ (n->pos);
+					vector<Point3f> candidates = (*actions[i]).succ(n.pos);
 
 					for (int j = 0; j < candidates.size(); j++){
+						//cout << "current **" << i << endl;
+						//cout << "cc: (" << candidates[j].x << "," << candidates[j].y << ")" << endl;
 
-						if (isValid(n->pos, candidates[j]) && !visited(candidates[j])){ //detect obstacle using this method, isValid! TODO
+						if (isValid(n.pos, candidates[j]) && !visited(candidates[j])){ //detect obstacle using this method, isValid! TODO
 
-							node *new_node = new node;
-							new_node->dist = n->dist + actions[i].cost(n->pos, candidates[j]);
-							new_node->priority = new_node->dist + heuristics(candidates[j]);
-							new_node->pos = candidates[j];
-
-							new_node->prev = n;
-							new_node->move = actions[i];
+							double dist = n.dist + (*actions[i]).cost(n.pos, candidates[j]);
+							Node new_node(dist + heuristics(candidates[j]), 
+												dist, candidates[j], 0, &n, (*actions[i]));
+							cout << "newnode: (" << new_node.pos.x << "," << new_node.pos.y << ")" << endl;
 
 							insertPQ(new_node);
 							//checkPQ();
@@ -211,12 +318,14 @@ namespace AStar{
 				}
 			}
 		}
+
+		cout <<"here!" << endl;
 	}
 
 	void drawPath(){
 
 		if (current_path.empty()) return;
-		vector<node> path = current_path;
+		vector<Node> path = current_path;
 
 		for (int j = 0; j < path.size()-1; j++){
 
@@ -236,16 +345,15 @@ namespace AStar{
 
 	}
 
-
 	/* ################# */
 	/* graph search methods  */
 	/* ################# */
 
-	void insertPQ(node *new_node){
+	void insertPQ(Node new_node){
 
 		int insert_idx = pq.size();
 		for (int i = 0; i < pq.size(); i++) {
-			if ((pq[i])->priority > new_node->priority){
+			if ((pq[i]).priority > new_node.priority){
 				insert_idx = i;
 				break;
 			}
@@ -259,10 +367,10 @@ namespace AStar{
 
 		for (int i = 0; i < pq.size()-1; i++) {
 
-				if ((pq[i])->priority > (pq[i+1])->priority){
+				if ((pq[i]).priority > (pq[i+1]).priority){
 					cout << "PQ WRONG!!!" << endl;
 					for (int i = 0; i < pq.size(); i++){
-						cout << pq[i]->priority << endl;
+						cout << pq[i].priority << endl;
 					}
 
 					while(true){
@@ -270,13 +378,12 @@ namespace AStar{
 					}
 				}
 			}
-
 	}
 
 	//call only if pq is not empty!
-	node *delminPQ(){
+	Node delminPQ(){
 
-		node *min_node = pq[0];
+		Node min_node = pq[0];
 		pq.erase(pq.begin());
 		return min_node;
 
@@ -292,11 +399,9 @@ namespace AStar{
 		return true;
 	}
 
-
 	bool visited(Point3f pt){
 
 		for (int j = 0; j < visited_set.size(); j++){
-
 			if (pt.x == visited_set[j].x && pt.y == visited_set[j].y && pt.z == visited_set[j].z){
 				return true;
 			}
@@ -315,6 +420,7 @@ namespace AStar{
 	double heuristics(Point3f curr){
 		return 0;//euclidean_dist(curr, dst);
 	}
+	/*
 
 	double rotate_cost (Point3f start, Point3f end){
 		return 1;
@@ -395,7 +501,7 @@ namespace AStar{
 		v1.insert(v1.begin(), p1);
 		v1.insert(v1.begin(), p2);
 		return v1;
-	}
+	}*/
 
 
 }
