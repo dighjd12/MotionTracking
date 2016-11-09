@@ -18,6 +18,17 @@ namespace AStar{
 	int GRID_SIZE = 40;
 	double final_angle = M_PI/2; //TODO make this user-specified
 
+	// change resolution ++ frame rate
+	// how much of the lags  --  time astar vs opencv stuffs
+	// reuse path in the astar
+	// astar any-time invariant
+	// putting pre-computed costs ** 
+
+	// time the rotation
+	// DEMO - estimate how far it moved / seqs of movements
+	// as we drive, distnace reduce
+	// cam looking at robot, move the robot according to the path/actions
+
 	// overlay transparent image and draw on it!!
 	// rotation + final dst angle* bug......
 	// TODO log the sequence of actions + astar every 10 frame*****
@@ -40,7 +51,7 @@ namespace AStar{
 
 //	action roll, rotate, forward;
 	//action actions[3];
-	Action *actions[2];
+	Action *actions[3];
 	vector<Node> pq;
 
 	Mat img;
@@ -70,7 +81,7 @@ class Roll: public Action {
 
 class Forward: public Action {
    public:
-      	double forward_cost (Point3f start, Point3f end){
+      	double cost (Point3f start, Point3f end){
 			return 1;//euclidean_dist(start, end);
 		}
 		vector<Point3f> succ (Point3f curr){
@@ -219,21 +230,6 @@ class Rotate: public Action {
 
 	}
 
-	/* free node pointers used in the path planning */
-	void freePtrs(){
-
-		if (!pq.empty()){
-			for (int i=0; i<pq.size(); i++){
-				
-			}
-		}
-
-		if (!current_path.empty()){
-
-		}
-
-	}
-
 	/* run the astar on the graph */
 	void planPath(Point src_pt, Point dst_pt, double curr_angle){
 
@@ -244,13 +240,18 @@ class Rotate: public Action {
 		pq = vector<Node>();
 
 		//do the astar
+		//fix!! 
 		Roll roll;
 		Rotate rotate;
 		Forward forward;
 
 		actions[0] = &roll;
-		//actions[1] = &rotate;
-		actions[1] = &forward;
+		actions[1] = &rotate;
+		actions[2] = &forward;
+
+		cout << "*********" << endl;
+		cout << "node: (" << src_pt.x << "," << src_pt.y << ")" << endl;
+		cout << "node: (" << dst_pt.x << "," << dst_pt.y  << ")  " << endl;
 
 		//TODO be able to tell if dst is reachable from src
 		Node start_node(0, 0, Point3f(src_pt.x, src_pt.y, curr_angle),
@@ -266,16 +267,18 @@ class Rotate: public Action {
 		while (!pq.empty()){
 
 			Node n = delminPQ();
-			cout << "node: (" << n.pos.x << "," << n.pos.y << ")" << endl;
+			//cout << "node: (" << n.pos.x << "," << n.pos.y << "," << n.pos.z << ")  --> " << n.priority << " "<< n.dist << endl;
 
 			if (n.pos.x == dst_pt.x && n.pos.y == dst_pt.y 
 				&& n.pos.z > final_angle-M_PI/6 && n.pos.z < final_angle+M_PI/6){ //TODO bounds check by quadrants!
-
-				cout << "done astar" << endl;
-				//return;
+				
 					vector<Node> path = vector<Node>();
 					Node *pathnode = &n;
-					while (pathnode != nullptr){
+					cout << (*pathnode).pos.x << " " << (*pathnode).pos.y << endl;
+					cout << (*(pathnode->prev)).pos.x << " " << (*(pathnode->prev)).pos.y << endl;
+					cout << (*(pathnode->prev->prev)).pos.x << " " << (*(pathnode->prev->prev)).pos.y << endl;
+					return;
+					while (!(pathnode->pos.x == src_pt.x && pathnode->pos.y == src_pt.y)){ //&& pathnode->pos.z == src_pt.z){
 
 						cout << "path!: (" << (*pathnode).pos.x << "," << (*pathnode).pos.y <<"," <<(*pathnode).pos.z <<  ")" << endl;
 						//print the pt/action or store in array
@@ -286,6 +289,7 @@ class Rotate: public Action {
 					}
 
 					current_path = path;
+					cout << "done astar" << endl;
 					//freePtrs();
 					//drawPath(path);
 					return;
@@ -295,7 +299,6 @@ class Rotate: public Action {
 			if (!visited(n.pos)){
 
 				insertVisited(n.pos);
-
 				//expand
 				for (int i=0; i<(sizeof(actions)/sizeof(*actions)); i++){
 					vector<Point3f> candidates = (*actions[i]).succ(n.pos);
@@ -306,10 +309,12 @@ class Rotate: public Action {
 
 						if (isValid(n.pos, candidates[j]) && !visited(candidates[j])){ //detect obstacle using this method, isValid! TODO
 
+							Node t(n.priority, n.dist, n.pos, n.visited, n.prev, n.move);
+
 							double dist = n.dist + (*actions[i]).cost(n.pos, candidates[j]);
-							Node new_node(dist + heuristics(candidates[j]), 
-												dist, candidates[j], 0, &n, (*actions[i]));
-							cout << "newnode: (" << new_node.pos.x << "," << new_node.pos.y << ")" << endl;
+							Node new_node(dist + heuristics(candidates[j]),
+												dist, candidates[j], 0, &t, (*actions[i]));
+							//cout << "newnode: (" << new_node.pos.x << "," << new_node.pos.y << ")" << new_node.priority << " " << new_node.dist << endl;
 
 							insertPQ(new_node);
 							//checkPQ();
@@ -319,7 +324,7 @@ class Rotate: public Action {
 			}
 		}
 
-		cout <<"here!" << endl;
+		cout <<"astar ending without finding path!" << endl;
 	}
 
 	void drawPath(){

@@ -93,7 +93,6 @@ static void setDst( int event, int x, int y, int f, void* ){
 
 
 int main( int argc, char** argv ) {
-
 	cout << "hello world" << endl;
 
 	if (argc!=3){ //maybe use flag?
