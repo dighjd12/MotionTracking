@@ -36,12 +36,13 @@ namespace AStar{
 	Point3f dst;
 	double angle;
 
-	vector<node> current_path;
-	vector<Point3f> visited_set;
+	vector<node *> current_path;
+	const int astarFrameCount = 20;
 
 	action roll, rotate, forward;
 	action actions[3];
 	vector<node*> pq;
+	vector<node*> visited_set;
 
 	Mat img;
 	//Mat overlay_img;
@@ -81,7 +82,7 @@ namespace AStar{
 
 	}
 
-	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle){
+	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle, int frameCounter){
 
 		//overlay_img = Mat(image.size, CV_64FC1);
 
@@ -97,8 +98,12 @@ namespace AStar{
 		sprintf(name,"source is: x=%d, y=%d, th=%.2f. destination is: x=%d, y=%d, th=%.2f.", src_pt.x, src_pt.y, curr_angle, dst_pt.x, dst_pt.y, dst_angle);
 		putText(image, name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
 
-		planPath (src_pt, dst_pt, curr_angle2);
-
+		if (frameCounter % astarFrameCount == 0){
+			freePath();
+			current_path = vector<node *>();
+			planPath (src_pt, dst_pt, curr_angle2, current_path);
+		}
+		drawPath(current_path);
 
 	}
 
@@ -125,27 +130,44 @@ namespace AStar{
 
 	}
 
-	void freePtrs(){
+	void freeSets(){
+
+		//cout << "sizes:" << pq.size() << " " << visited_set.size() << endl;
 
 		if (!pq.empty()){
 			for (int i=0; i<pq.size(); i++){
-				
+				delete pq[i];
 			}
 		}
+		//cout << "freed pq!" << endl;
 
+		if (!visited_set.empty()){
+			for (int i=0; i<visited_set.size(); i++){
+				delete visited_set[i];
+			}
+		}
+		//cout << "freed visited!"<<endl;
+
+	}
+
+	void freePath(){
+
+		cout << "freed path!" << endl;
 		if (!current_path.empty()){
-
+			for (int i=0; i<current_path.size(); i++){
+				delete current_path[i];
+			}
 		}
 
 	}
 
 
-	void planPath(Point src_pt, Point dst_pt, double curr_angle){
+	void planPath(Point src_pt, Point dst_pt, double curr_angle, vector<node *>& path){
 
 		src = Point3f(src_pt.x, src_pt.y, curr_angle);
 		dst = Point3f(dst_pt.x, dst_pt.y, curr_angle);
 		angle = curr_angle; //start angle
-		visited_set = vector<Point3f>();
+		visited_set = vector<node *>();
 		pq = vector<node *>();
 
 		//do the astar
@@ -166,27 +188,24 @@ namespace AStar{
 
 			if (n->pos.x == dst_pt.x && n->pos.y == dst_pt.y && n->pos.z > final_angle-M_PI/6 && n->pos.z < final_angle+M_PI/6){ //TODO bounds check by quadrants!
 
-				cout << "done astar" << endl;
-
-					vector<node> path = vector<node>();
+					cout << "done astar" << endl;
 					while (n != nullptr){
-
-						//print the pt/action or store in array
-						path.insert(path.begin(), *n);
-						node *temp = n->prev;
-						//delete n;
-						n = temp;
+						//copy values
+						node *path_node = new node;
+						path_node->dist = n->dist;
+						path_node->pos = n->pos;
+						path.insert(path.begin(), path_node);
+						n = n->prev;
 					}
 
-					current_path = path;
-					//drawPath(path);
+					//current_path = path;
+					insertVisited(n);
+					freeSets();
 					return;
 
 			}
 
 			if (!visited(n->pos)){
-
-				insertVisited(n->pos);
 				//expand
 				for (int i=0; i<(sizeof(actions)/sizeof(*actions)); i++){
 
@@ -210,17 +229,18 @@ namespace AStar{
 					}
 				}
 			}
+
+			insertVisited(n);
 		}
 	}
 
-	void drawPath(){
+	void drawPath(vector<node *> path){
 
-		if (current_path.empty()) return;
-		vector<node> path = current_path;
+		if (path.empty()) return;
 
 		for (int j = 0; j < path.size()-1; j++){
 
-			line(image_orig, Point(path[j].pos.x, path[j].pos.y), Point(path[j+1].pos.x, path[j+1].pos.y), Scalar(0, 255, 0), 1, CV_AA);
+			line(image_orig, Point(path[j]->pos.x, path[j]->pos.y), Point(path[j+1]->pos.x, path[j+1]->pos.y), Scalar(0, 255, 0), 1, CV_AA);
 /*
 			if (path[j].pos.x == path[j+1].pos.x && path[j].pos.y == path[j+1].pos.y){
 				//rotation
@@ -297,15 +317,15 @@ namespace AStar{
 
 		for (int j = 0; j < visited_set.size(); j++){
 
-			if (pt.x == visited_set[j].x && pt.y == visited_set[j].y && pt.z == visited_set[j].z){
+			if (pt.x == visited_set[j]->pos.x && pt.y == visited_set[j]->pos.y && pt.z == visited_set[j]->pos.z){
 				return true;
 			}
 		}
 		return false;
 	}
 
-	void insertVisited(Point3f pt){
-		visited_set.insert(visited_set.end(),pt);
+	void insertVisited(node *new_node){
+		visited_set.insert(visited_set.end(),new_node);
 	}
 
 	double euclidean_dist(Point3f start, Point3f end){

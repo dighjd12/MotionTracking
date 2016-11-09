@@ -173,10 +173,10 @@ int main( int argc, char** argv ) {
 		redAndMoving(frame); //threshold + axis drawing
 
 		drawGrids(frame, GRID_SIZE);
-		if (pt_flag && dst_flag && frameCounter % astarFrameCount == 0){
-			planPathOnVideo (frame, curr_pt, dst_pt, curr_angle, dst_angle);
+		if (pt_flag && dst_flag){
+			planPathOnVideo (frame, curr_pt, dst_pt, curr_angle, dst_angle, frameCounter);
 		}
-		drawPath();
+		//drawPath();
 		imshow( original_frame_window, frame );
 
 		/* if key pressed is 'f', then will stop and show hsv values of that frame.

@@ -30,10 +30,12 @@ struct node{
 };
 
     //void setDst( int event, int x, int y, int f, void* );
-	void planPath(Point src, Point dst, double angle);
-	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle);
+	void planPath(Point src, Point dst, double angle, vector<node *>& path);
+	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle, int frameCounter);
 	void drawGrids(Mat &image, int grid_size);
 	void roundToGridPoint(Point &pt, int grid_size);
+	void freePath();
+	void freeSets();
 	node *delminPQ();
 	void insertPQ(node *new_node);
 	void checkPQ();
@@ -45,8 +47,8 @@ struct node{
 	double rotate_cost (Point3f start, Point3f end);
 	double heuristics(Point3f curr);
 	double euclidean_dist(Point3f start, Point3f end);
-	void drawPath();
-	void insertVisited(Point3f pt);
+	void drawPath(vector<node *> path);
+	void insertVisited(node *new_node);
 	bool visited(Point3f pt);
 	bool isValid (Point3f start, Point3f end);
 	void roundToGridPoint(Point3f &pt, int grid_size);
