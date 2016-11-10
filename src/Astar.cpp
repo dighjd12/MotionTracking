@@ -18,6 +18,18 @@ namespace AStar{
 	int GRID_SIZE = 40;
 	double final_angle = M_PI/2; //TODO make this user-specified
 
+	// change resolution ++ frame rate
+	// how much of the lags  --  time astar vs opencv stuffs
+
+	// reuse path in the astar
+	// astar any-time invariant
+	// putting pre-computed costs ** 
+
+	// time the rotation
+	// DEMO - estimate how far it moved / seqs of movements
+	// as we drive, distnace reduce
+	// cam looking at robot, move the robot according to the path/actions
+
 	// overlay transparent image and draw on it!!
 	// rotation + final dst angle* bugg......
 	// TODO log the sequence of actions + astar every 10 frame*****
@@ -152,7 +164,7 @@ namespace AStar{
 
 	void freePath(){
 
-		cout << "freed path!" << endl;
+		//cout << "freed path!" << endl;
 		if (!current_path.empty()){
 			for (int i=0; i<current_path.size(); i++){
 				delete current_path[i];
@@ -240,18 +252,18 @@ namespace AStar{
 
 		for (int j = 0; j < path.size()-1; j++){
 
-			line(image_orig, Point(path[j]->pos.x, path[j]->pos.y), Point(path[j+1]->pos.x, path[j+1]->pos.y), Scalar(0, 255, 0), 1, CV_AA);
-/*
-			if (path[j].pos.x == path[j+1].pos.x && path[j].pos.y == path[j+1].pos.y){
+			//line(image_orig, Point(path[j]->pos.x, path[j]->pos.y), Point(path[j+1]->pos.x, path[j+1]->pos.y), Scalar(0, 255, 0), 1, CV_AA);
+
+			if (path[j]->pos.x == path[j+1]->pos.x && path[j]->pos.y == path[j+1]->pos.y){
 				//rotation
 				//cout << "?" << endl; //??????? three rotation and a diagonal ???????????
-				circle(image_orig, Point(path[j].pos.x, path[j].pos.y), 3, Scalar(255, 0, 255), 2);
+				circle(image_orig, Point(path[j]->pos.x, path[j]->pos.y), 3, Scalar(255, 0, 255), 2);
 				char name[50];
-				sprintf(name,"rotate %.2f", path[j+1].pos.z - path[j].pos.z);
-				putText(image_orig, name, Point(path[j].pos.x, path[j].pos.y-5), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,0,255), 2,8,false );
+				sprintf(name,"rotate %.2f", path[j+1]->pos.z - path[j]->pos.z);
+				putText(image_orig, name, Point(path[j]->pos.x, path[j]->pos.y-5), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,0,255), 2,8,false );
 			}else{
-				line(image_orig, Point(path[j].pos.x, path[j].pos.y), Point(path[j+1].pos.x, path[j+1].pos.y), Scalar(0, 255, 0), 1, CV_AA);
-			}*/
+				line(image_orig, Point(path[j]->pos.x, path[j]->pos.y), Point(path[j+1]->pos.x, path[j+1]->pos.y), Scalar(0, 255, 0), 1, CV_AA);
+			}
 		}
 
 	}
@@ -329,11 +341,11 @@ namespace AStar{
 	}
 
 	double euclidean_dist(Point3f start, Point3f end){
-		return sqrt((start.x-end.x)*(start.x-end.x) + (start.y-end.y)*(start.y-end.y)); //TODO should return float?
+		return sqrt((start.x-end.x)*(start.x-end.x) + (start.y-end.y)*(start.y-end.y) + (start.z-end.z)*(start.z-end.z));
 	}
 
 	double heuristics(Point3f curr){
-		return 0;//euclidean_dist(curr, dst);
+		return euclidean_dist(curr, dst);
 	}
 
 	double rotate_cost (Point3f start, Point3f end){
