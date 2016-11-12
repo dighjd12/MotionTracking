@@ -49,7 +49,7 @@ namespace AStar{
 
 	//install actions and fill in moves
 	static void makeActions(){
-
+    //does this just make actions on the stack? could be freeing problem
 		action roll;
 		action forward;
 		action rotate;
@@ -161,14 +161,14 @@ namespace AStar{
 
 	}
 
-
+	// a* algorithm
 	void planPath(Point src_pt, Point dst_pt, double curr_angle, vector<node *>& path){
 
 		src = Point3f(src_pt.x, src_pt.y, curr_angle);
 		dst = Point3f(dst_pt.x, dst_pt.y, curr_angle);
 		angle = curr_angle; //start angle
 		visited_set = vector<node *>();
-		pq = vector<node *>();
+		pq = vector<node *>(); //change to heap
 
 		//do the astar
 		makeActions();
@@ -183,10 +183,14 @@ namespace AStar{
 		insertPQ(start_node);
 
 		while (!pq.empty()){
+			//pq has lowest G cost
 
 			node *n = delminPQ();
 
 			if (n->pos.x == dst_pt.x && n->pos.y == dst_pt.y && n->pos.z > final_angle-M_PI/6 && n->pos.z < final_angle+M_PI/6){ //TODO bounds check by quadrants!
+				//if astar finished
+
+				//does checking bounds of angles account for wraparound of -pi <= theta < pi?
 
 					cout << "done astar" << endl;
 					while (n != nullptr){
@@ -208,8 +212,10 @@ namespace AStar{
 			if (!visited(n->pos)){
 				//expand
 				for (int i=0; i<(sizeof(actions)/sizeof(*actions)); i++){
+                    //is this typical in C++? never seen sizeof variable not type
 
 					vector<Point3f> candidates  = actions[i].succ (n->pos);
+                    //is it typical to store function pointers over enums
 
 					for (int j = 0; j < candidates.size(); j++){
 
@@ -293,7 +299,7 @@ namespace AStar{
 
 	}
 
-	//call only if pq is not empty!
+    //call only if pq is not empty!
 	node *delminPQ(){
 
 		node *min_node = pq[0];
@@ -330,6 +336,7 @@ namespace AStar{
 
 	double euclidean_dist(Point3f start, Point3f end){
 		return sqrt((start.x-end.x)*(start.x-end.x) + (start.y-end.y)*(start.y-end.y)); //TODO should return float?
+        //admissible heurisitcs
 	}
 
 	double heuristics(Point3f curr){
@@ -337,10 +344,11 @@ namespace AStar{
 	}
 
 	double rotate_cost (Point3f start, Point3f end){
-		return 1;
+		return 1;//1 unit 45 degrees
 	}
 
 	double roll_cost (Point3f start, Point3f end){
+        //what's rolling?
 		return 1;//euclidean_dist(start, end);
 	}
 
@@ -348,7 +356,33 @@ namespace AStar{
 		return 1;//euclidean_dist(start, end);
 	}
 
-	vector<Point3f> rotate_succ (Point3f curr){ //TODO: currently only 4-way connected, assuming th is aligned with one of the axes.
+    Point3f calc_angle_sum(Point3f curr, double angle) {
+        //to optimize, reduce redundant operations (like 2*pi)
+
+        angle = curr.z + angle;
+        angle = fmod(angle + M_PI, 2*M_PI);
+        if (angle < 0)
+            angle += 2*M_PI;
+        angle =  angle - M_PI;
+        return Point3f(curr.x, curr.y, angle);
+    }
+
+   vector<Point3f> rotate_succ (Point3f curr){
+//        double angles [] = {M_PI/4.0, M_PI/2.0, 3.0 * M_PI / 4.0, M_PI, 5.0 * M_PI / 4.0, 3.0 * M_PI / 2.0, 7.0 * M_PI / 4.0};
+        //could be declared as global
+
+        vector<Point3f> v1 = vector<Point3f>();
+        for (int i = 0; i < 7; i++) {
+            double angle = (i + 1) * M_PI / 4.0;
+            Point3f p = calc_angle_sum(curr, angle);
+            roundToGridPoint(p, GRID_SIZE);
+            v1.insert(v1.begin(), p);
+        }
+
+        return v1;
+    }
+
+	/*vector<Point3f> rotate_succ (Point3f curr){ //TODO: currently only 4-way connected, assuming th is aligned with one of the axes.
 
 		//cout << "here is called!" << endl;
 
@@ -390,7 +424,7 @@ namespace AStar{
 		v1.insert(v1.begin(), p3);
 		v1.insert(v1.begin(), p4);
 		return v1;
-	}
+	}*/
 
 	vector<Point3f> roll_succ (Point3f curr){ //orientation head of our snake (rad)
 
