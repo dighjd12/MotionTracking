@@ -1,3 +1,7 @@
 src/disp
+<<<<<<< HEAD
 src/CMakeLists.txt
 src/.idea/
+=======
+src/run.sh
+>>>>>>> d4fff3b4e89ff32a11ba20f64778854f63a1c21e
