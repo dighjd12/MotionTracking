@@ -19,7 +19,6 @@ namespace AStar{
 	double final_angle = M_PI/2; //TODO make this user-specified
 
 	// change resolution ++ frame rate
-	// how much of the lags  --  time astar vs opencv stuffs
 
 	// reuse path in the astar
 	// astar any-time invariant
@@ -32,17 +31,15 @@ namespace AStar{
 
 	// overlay transparent image and draw on it!!
 	// rotation + final dst angle* bugg......
-	// TODO log the sequence of actions + astar every 10 frame*****
-	//docs + interface/ highlight major parts
+	// TODO log the sequence of actions
+	// docs + interface/ highlight major parts
 
 	// state , bounds for rotation
-	// astar every 10 frame?
 	// astar in snake frame
 	// obstacles?
 
 	// implement on the snake .. order rotation + cost for motions/actions
 	// simulations ? testing
-	//c++ 11
 
 	Point3f src;
 	Point3f dst;
@@ -94,6 +91,10 @@ namespace AStar{
 
 	}
 
+
+	/* outputs the path planning information 
+	and plans path every astarFrameCount frame 
+	also draws the path */
 	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle, int frameCounter){
 
 		//overlay_img = Mat(image.size, CV_64FC1);
@@ -111,9 +112,11 @@ namespace AStar{
 		putText(image, name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
 
 		if (frameCounter % astarFrameCount == 0){
+			DEBUG(start = clock();)
 			freePath();
 			current_path = vector<node *>();
 			planPath (src_pt, dst_pt, curr_angle2, current_path);
+			DEBUG(cout << "		astar: " << (clock() - start) / (double) CLOCKS_PER_SEC << endl;)
 		}
 		drawPath(current_path);
 
@@ -144,27 +147,22 @@ namespace AStar{
 
 	void freeSets(){
 
-		//cout << "sizes:" << pq.size() << " " << visited_set.size() << endl;
-
 		if (!pq.empty()){
 			for (int i=0; i<pq.size(); i++){
 				delete pq[i];
 			}
 		}
-		//cout << "freed pq!" << endl;
 
 		if (!visited_set.empty()){
 			for (int i=0; i<visited_set.size(); i++){
 				delete visited_set[i];
 			}
 		}
-		//cout << "freed visited!"<<endl;
 
 	}
 
 	void freePath(){
 
-		//cout << "freed path!" << endl;
 		if (!current_path.empty()){
 			for (int i=0; i<current_path.size(); i++){
 				delete current_path[i];
@@ -200,7 +198,7 @@ namespace AStar{
 
 			if (n->pos.x == dst_pt.x && n->pos.y == dst_pt.y && n->pos.z > final_angle-M_PI/6 && n->pos.z < final_angle+M_PI/6){ //TODO bounds check by quadrants!
 
-					cout << "done astar" << endl;
+					DEBUG(cout << "done astar" << endl;)
 					while (n != nullptr){
 						//copy values
 						node *path_node = new node;
@@ -210,7 +208,6 @@ namespace AStar{
 						n = n->prev;
 					}
 
-					//current_path = path;
 					insertVisited(n);
 					freeSets();
 					return;
@@ -256,7 +253,6 @@ namespace AStar{
 
 			if (path[j]->pos.x == path[j+1]->pos.x && path[j]->pos.y == path[j+1]->pos.y){
 				//rotation
-				//cout << "?" << endl; //??????? three rotation and a diagonal ???????????
 				circle(image_orig, Point(path[j]->pos.x, path[j]->pos.y), 3, Scalar(255, 0, 255), 2);
 				char name[50];
 				sprintf(name,"rotate %.2f", path[j+1]->pos.z - path[j]->pos.z);
@@ -348,6 +344,7 @@ namespace AStar{
 		return euclidean_dist(curr, dst);
 	}
 
+
 	double rotate_cost (Point3f start, Point3f end){
 		return 1;
 	}
@@ -362,8 +359,7 @@ namespace AStar{
 
 	vector<Point3f> rotate_succ (Point3f curr){ //TODO: currently only 4-way connected, assuming th is aligned with one of the axes.
 
-		//cout << "here is called!" << endl;
-
+		/* [-180, 180] normalization for angles */
 		double angle = curr.z + M_PI/2;
 		angle = fmod(angle + M_PI,2*M_PI);
 		if (angle < 0)

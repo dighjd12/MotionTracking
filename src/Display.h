@@ -12,10 +12,16 @@
 using namespace cv;
 using namespace std;
 
-
 extern Mat image_orig;
+extern clock_t start;
 extern Point curr_pt;
 
+#define _DEBUG
+#ifdef _DEBUG
+#define DEBUG(x) x
+#else 
+#define DEBUG(x)
+#endif
 
 void exportToCSV(Mat &matrix, string filename);
 void plotAxis(Point cntr, double angle);
