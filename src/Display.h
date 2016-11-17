@@ -16,11 +16,18 @@ extern Mat image_orig;
 extern clock_t start;
 extern Point curr_pt;
 
-#define _DEBUG
+#define _DEBUG //if we want to print debug statements to stdout
 #ifdef _DEBUG
 #define DEBUG(x) x
 #else 
 #define DEBUG(x)
+#endif
+
+#define _EXPORT //if we want to export data to csv
+#ifdef _EXPORT
+#define EXPORT(x) x
+#else 
+#define EXPORT(x)
 #endif
 
 void exportToCSV(Mat &matrix, string filename);

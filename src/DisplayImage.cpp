@@ -25,6 +25,8 @@ int frameCounter = 0;
 
 double dst_angle = M_PI/2; //TODO make this user-specified
 
+// vectors of length = low_pass_length 
+// used for low-pass filter
 vector<double> xData = vector<double>();
 vector<double> yData = vector<double>();
 vector<double> thData = vector<double>();
@@ -32,9 +34,10 @@ vector<double> th2Data = vector<double>();
 int low_pass_length = 10;
 Mat weightsMat;
 
+// mat to record data throughout the session and export to csv
 Mat dataMat;
 
-vector<Point> prev_snake;
+//vector<Point> prev_snake;
 Mat image_orig;
 clock_t start;
 VideoCapture cap;
@@ -57,15 +60,11 @@ Size size(resize_width,resize_height);
 // at first, point to where about the snake will be,
 //threshold choosing??
 
-//TODO: !!!!!1!!
 //axis ---> make it consistent, s.t. green one is the longer axis
 
-// a* with states
-//divide using grids, be able to click destination and know where you are.
 // things to consider: (+= bounds for rotation and translation) how to send commands to rotation (watch until it reaches the right angle,,
 //etc), adding more actions, blocking out (or clicking on ) obstacles
 //mix of actions to consider
-//draw/click on obstacles?
 
 int lower_red_lower_bound;
 int lower_red_upper_bound;
@@ -87,8 +86,7 @@ void on_trackbar( int, void* ){
 static void setDst( int event, int x, int y, int f, void* ){
 	if  ( event == EVENT_LBUTTONDOWN ){
 		dst_flag = true;
-		Point pt = Point(x,y);
-		dst_pt = pt;
+		dst_pt = Point(x,y);
 	}
 
 }
@@ -96,7 +94,6 @@ static void setDst( int event, int x, int y, int f, void* ){
 int main( int argc, char** argv ) {
 
 	DEBUG(cout << "hello world" << endl;)
-
 	if (argc!=3){ //maybe use flag?
 		cout << "invalid args" << endl;
 		return -1;
@@ -125,8 +122,9 @@ int main( int argc, char** argv ) {
 	upper_red_upper_bound = 179;
 
 	vector<double> weights = vector<double>();
+	double ratio = 1/(double)low_pass_length;
 	for (int i=0; i<low_pass_length; i++){
-		weights.insert(weights.end(), 0.1);  //equal weights now***** TODO!!!!
+		weights.insert(weights.end(), ratio);
 	}
 	weightsMat = Mat(weights, true);
 
@@ -155,7 +153,7 @@ int main( int argc, char** argv ) {
 		cap >> frame;
 
 		if (frame.empty()) { //EOF
-			 exportToCSV(dataMat, "dataCSV.csv");
+			 EXPORT(exportToCSV(dataMat, "dataCSV.csv");)
 					  break;
 		}
 
@@ -190,7 +188,7 @@ int main( int argc, char** argv ) {
 		if (res % 256 == 102){
 			showImgWithHSV(frame); //TODO when stop, show the picture with the axes on it
 		} else if(res >= 0) {
-			 exportToCSV(dataMat, "dataCSV.csv");
+			EXPORT(exportToCSV(dataMat, "dataCSV.csv");)
 			break;
 		}
 
@@ -389,6 +387,7 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
 	angle2 =  angle2 - M_PI;
 
 	/* record data */
+    EXPORT(
     if (dataMat.rows <= frameCounter){
     	Mat temp;
     	copyMakeBorder(dataMat, temp, 0, numFrameChunk, 0, 0, BORDER_CONSTANT, 0 );
@@ -398,6 +397,7 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     dataMat.at <double>(frameCounter, 1) = cntr.y;
     dataMat.at <double> (frameCounter, 2) = angle; // radians
     dataMat.at <double> (frameCounter, 3) = angle * 180/M_PI; //degrees
+    )
 
     /* low pass filter */
     if (xData.size() < low_pass_length){

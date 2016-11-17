@@ -7,6 +7,7 @@
 
 #include <cv.h>
 #include <highgui.h>
+#include <string>
 #include "Display.h"
 #include "astar.h"
 
@@ -31,8 +32,6 @@ namespace AStar{
 
 	// overlay transparent image and draw on it!!
 	// rotation + final dst angle* bugg......
-	// TODO log the sequence of actions
-	// docs + interface/ highlight major parts
 
 	// state , bounds for rotation
 	// astar in snake frame
@@ -41,27 +40,29 @@ namespace AStar{
 	// implement on the snake .. order rotation + cost for motions/actions
 	// simulations ? testing
 
-	Point3f src;
-	Point3f dst;
-	double angle;
+	//Point3f src;
+	Point3f dst; //used by heuristics 
 
 	vector<node *> current_path;
 	const int astarFrameCount = 20;
 
 	action roll, rotate, forward;
 	action actions[3];
+	void makeActions (void) __attribute__((constructor)); //calls makeActions before main
+
 	vector<node*> pq;
 	vector<node*> visited_set;
 
-	Mat img;
 	//Mat overlay_img;
 
-	//install actions and fill in moves
-	static void makeActions(){
+	/*
+	* populates actions - array of all possible action for the snake
+	*/
+	void makeActions(){
 
-		action roll;
-		action forward;
-		action rotate;
+		roll.name = "roll";
+		forward.name = "forward";
+		rotate.name = "rotate";
 		roll.cost = &roll_cost;
 		roll.succ = &roll_succ;
 		forward.cost = &forward_cost;
@@ -75,9 +76,12 @@ namespace AStar{
 
 	}
 
+	/*
+	* draws n x n grid on the image
+	* n = grid_size
+	*/
 	void drawGrids(Mat &image, int grid_size){
 
-		img = image;
 		int width=image.cols;
 		int height=image.rows;
 
@@ -92,9 +96,11 @@ namespace AStar{
 	}
 
 
-	/* outputs the path planning information 
-	and plans path every astarFrameCount frame 
-	also draws the path */
+	/* 
+	* outputs the path planning information 
+	* and plans new path every astarFrameCount frame 
+	* also draws the path on the image
+	*/
 	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle, int frameCounter){
 
 		//overlay_img = Mat(image.size, CV_64FC1);
@@ -116,6 +122,7 @@ namespace AStar{
 			freePath();
 			current_path = vector<node *>();
 			planPath (src_pt, dst_pt, curr_angle2, current_path);
+			printPath();
 			DEBUG(cout << "		astar: " << (clock() - start) / (double) CLOCKS_PER_SEC << endl;)
 		}
 		drawPath(current_path);
@@ -123,6 +130,9 @@ namespace AStar{
 	}
 
 
+	/*
+	* rounds the 2D point down to upper left corner of the grid it's in
+	*/
 	void roundToGridPoint(Point &pt, int grid_size){
 
 		//rounds down
@@ -134,6 +144,9 @@ namespace AStar{
 
 	}
 
+	/*
+	* rounds the 3D point to upper left corner of the grid it's in
+	*/
 	void roundToGridPoint(Point3f &pt, int grid_size){
 
 		//rounds down
@@ -145,8 +158,24 @@ namespace AStar{
 
 	}
 
-	void freeSets(){
+	/*
+	* prints current path (actions to perform to reach dst) out to the stdout
+	*/
+	void printPath(){
+		DEBUG(cout << "printing the action sequence" << endl);
 
+		if (!current_path.empty()){
+			for (int i=0; i<current_path.size(); i++){
+				DEBUG(cout << ((current_path[i])->move).name << endl;)
+			}
+		}
+
+	}
+
+	/*
+	* frees the data structures used by astar
+	*/
+	void freeSets(){
 		if (!pq.empty()){
 			for (int i=0; i<pq.size(); i++){
 				delete pq[i];
@@ -158,30 +187,28 @@ namespace AStar{
 				delete visited_set[i];
 			}
 		}
-
 	}
 
+	/*
+	* frees current path
+	*/
 	void freePath(){
-
 		if (!current_path.empty()){
 			for (int i=0; i<current_path.size(); i++){
 				delete current_path[i];
 			}
 		}
-
 	}
 
-
+	/*
+	* runs Astar
+	*/
 	void planPath(Point src_pt, Point dst_pt, double curr_angle, vector<node *>& path){
 
-		src = Point3f(src_pt.x, src_pt.y, curr_angle);
+		//src = Point3f(src_pt.x, src_pt.y, curr_angle);
 		dst = Point3f(dst_pt.x, dst_pt.y, curr_angle);
-		angle = curr_angle; //start angle
 		visited_set = vector<node *>();
 		pq = vector<node *>();
-
-		//do the astar
-		makeActions();
 
 		//TODO be able to tell if dst is reachable from src
 		node *start_node = new node;
@@ -204,6 +231,7 @@ namespace AStar{
 						node *path_node = new node;
 						path_node->dist = n->dist;
 						path_node->pos = n->pos;
+						path_node->move = n->move;
 						path.insert(path.begin(), path_node);
 						n = n->prev;
 					}
@@ -243,22 +271,25 @@ namespace AStar{
 		}
 	}
 
+	/*
+	* draws path on the current frame 
+	* if _DEBUG is defined, prints the action sequence to stdout
+	*/
 	void drawPath(vector<node *> path){
 
 		if (path.empty()) return;
 
 		for (int j = 0; j < path.size()-1; j++){
-
-			//line(image_orig, Point(path[j]->pos.x, path[j]->pos.y), Point(path[j+1]->pos.x, path[j+1]->pos.y), Scalar(0, 255, 0), 1, CV_AA);
-
 			if (path[j]->pos.x == path[j+1]->pos.x && path[j]->pos.y == path[j+1]->pos.y){
 				//rotation
 				circle(image_orig, Point(path[j]->pos.x, path[j]->pos.y), 3, Scalar(255, 0, 255), 2);
-				char name[50];
+				char name[25];
 				sprintf(name,"rotate %.2f", path[j+1]->pos.z - path[j]->pos.z);
 				putText(image_orig, name, Point(path[j]->pos.x, path[j]->pos.y-5), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,0,255), 2,8,false );
+				DEBUG(cout << name << endl;)
 			}else{
 				line(image_orig, Point(path[j]->pos.x, path[j]->pos.y), Point(path[j+1]->pos.x, path[j+1]->pos.y), Scalar(0, 255, 0), 1, CV_AA);
+				DEBUG(cout << ((path[j+1])->move).name << " from (" << path[j]->pos.x << "," << path[j]->pos.y << ") to (" << path[j+1]->pos.x << "," << path[j+1]->pos.y << ")" << endl;)
 			}
 		}
 
@@ -313,7 +344,7 @@ namespace AStar{
 	bool isValid (Point3f start, Point3f end){
 
 		//boundary check
-		if (end.x > img.cols || end.x < 0 || end.y > img.rows || end.y < 0){
+		if (end.x > image_orig.cols || end.x < 0 || end.y > image_orig.rows || end.y < 0){
 			return false;
 		}
 

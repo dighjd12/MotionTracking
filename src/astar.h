@@ -10,12 +10,12 @@
 
 namespace AStar{
 
-
 using namespace cv;
 using namespace std;
 
 extern int GRID_SIZE;
 struct action{
+	string name;
 	double (*cost) (Point3f, Point3f); //returns the cost given the start and the end
 	vector<Point3f> (*succ) (Point3f); //returns the possible successors as vector
 } ; //one more function pointer that basically 'commands' the move given start and end
@@ -24,7 +24,6 @@ struct node{
 	double priority;
 	double dist;
 	Point3f pos;
-	int visited;
 	node *prev;
 	action move;
 };
@@ -34,6 +33,7 @@ struct node{
 	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle, int frameCounter);
 	void drawGrids(Mat &image, int grid_size);
 	void roundToGridPoint(Point &pt, int grid_size);
+	void printPath();
 	void freePath();
 	void freeSets();
 	node *delminPQ();
