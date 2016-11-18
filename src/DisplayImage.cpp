@@ -46,9 +46,9 @@ VideoCapture cap;
 bool pt_flag = false;
 // indicates that destination point has been specified
 bool dst_flag = false;
-Point curr_pt;
-double curr_angle = 0;
-Point dst_pt;
+Point3f curr_pt;
+//double curr_angle = 0;
+Point3f dst_pt;
 
 //global size object for resizing all images
 int resize_height = 500;
@@ -86,7 +86,7 @@ void on_trackbar( int, void* ){
 static void setDst( int event, int x, int y, int f, void* ){
 	if  ( event == EVENT_LBUTTONDOWN ){
 		dst_flag = true;
-		dst_pt = Point(x,y);
+		dst_pt = Point3f(x,y, dst_angle);
 	}
 
 }
@@ -157,14 +157,6 @@ int main( int argc, char** argv ) {
 					  break;
 		}
 
-		/*if (frameCounter < 1300){
-			frameCounter++;
-			continue;
-		}
-		if (frameCounter == 1300){
-			waitKey(0);
-		}*/
-
 		resize(frame,frame,size);
 		curr_frame = frame;
 		image_orig = frame;
@@ -176,7 +168,7 @@ int main( int argc, char** argv ) {
 		drawGrids(frame, GRID_SIZE);
 		if (pt_flag && dst_flag){
 			DEBUG(start = clock();)
-			planPathOnVideo (frame, curr_pt, dst_pt, curr_angle, dst_angle, frameCounter);
+			planPathOnVideo (frame, curr_pt, dst_pt, frameCounter);
 			DEBUG(cout << "duration for planning algs " << (clock() - start) / (double) CLOCKS_PER_SEC << endl;)
 		}
 		imshow( original_frame_window, frame );
@@ -424,10 +416,10 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     		double avg_th2 = weightsMat.dot(Mat(th2Data,true));
 
     		cntr = Point(avg_x, avg_y);
-    		curr_pt = Point(avg_x, avg_y);
     		angle = avg_th;
-    		curr_angle = angle;
+    		//curr_angle = angle;
     		angle2 = avg_th2;
+    		curr_pt = Point3f(avg_x, avg_y, angle);
 
     		 /* draw the principal components */
 			circle(img, cntr, 3, Scalar(255, 0, 255), 2);

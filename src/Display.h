@@ -14,7 +14,6 @@ using namespace std;
 
 extern Mat image_orig;
 extern clock_t start;
-extern Point curr_pt;
 
 #define _DEBUG //if we want to print debug statements to stdout
 #ifdef _DEBUG
