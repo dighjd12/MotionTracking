@@ -351,21 +351,24 @@ namespace AStar{
 		return sqrt((start.x-end.x)*(start.x-end.x) + (start.y-end.y)*(start.y-end.y) + (start.z-end.z)*(start.z-end.z));
 	}
 
+    /*double min(double x, double y) {
+        x < y ? x : y;
+    }*/
+
 	double heuristics(Point3f curr){
 		return euclidean_dist(curr, dst);
 	}
 
 	double rotate_cost (Point3f start, Point3f end){
-		return 1;//1 unit 45 degrees
+		return std::min(fabs(end - start), 2 * M_PI - fabs(start - end)) * 4.0 / M_PI;
 	}
 
 	double roll_cost (Point3f start, Point3f end){
-        //what's rolling?
-		return 1;//euclidean_dist(start, end);
+		return euclidean_dist(start, end);
 	}
 
 	double forward_cost (Point3f start, Point3f end){
-		return 1;//euclidean_dist(start, end);
+		return 4 * euclidean_dist(start, end); //this is a guess..
 	}
 
     Point3f calc_angle_sum(Point3f curr, double angle) {
