@@ -1,0 +1,255 @@
+diff --git a/src/Astar.cpp b/src/Astar.cpp
+index b3e1a33..8806ab5 100644
+--- a/src/Astar.cpp
++++ b/src/Astar.cpp
+@@ -17,7 +17,6 @@ namespace AStar{
+ 	using namespace std;
+ 
+ 	int GRID_SIZE = 40;
+-	double final_angle = M_PI/2; //TODO make this user-specified
+ 
+ 	// change resolution ++ frame rate
+ 
+@@ -31,16 +30,16 @@ namespace AStar{
+ 	// cam looking at robot, move the robot according to the path/actions
+ 
+ 	// overlay transparent image and draw on it!!
+-	// rotation + final dst angle* bugg......
++	// rotation + final dst angle* bugg...... TODO
+ 
+-	// state , bounds for rotation
++	// state, bounds for rotation
+ 	// astar in snake frame
+ 	// obstacles?
+ 
+ 	// implement on the snake .. order rotation + cost for motions/actions
+ 	// simulations ? testing
+ 
+-	//Point3f src;
++
+ 	Point3f dst; //used by heuristics 
+ 
+ 	vector<node *> current_path;
+@@ -95,41 +94,6 @@ namespace AStar{
+ 
+ 	}
+ 
+-
+-	/* 
+-	* outputs the path planning information 
+-	* and plans new path every astarFrameCount frame 
+-	* also draws the path on the image
+-	*/
+-	void planPathOnVideo (Mat &image, Point src_pt, Point dst_pt, double curr_angle, double dst_angle, int frameCounter){
+-
+-		//overlay_img = Mat(image.size, CV_64FC1);
+-
+-
+-		final_angle = dst_angle;
+-
+-		roundToGridPoint(src_pt, GRID_SIZE);
+-		roundToGridPoint(dst_pt, GRID_SIZE);
+-		//round curr angle
+-		double curr_angle2 = 0;//((curr_angle + (M_PI/2-1)) / (M_PI/2)) * (M_PI/2); //rounds to multiple of pi/2
+-
+-		char name[100];
+-		sprintf(name,"source is: x=%d, y=%d, th=%.2f. destination is: x=%d, y=%d, th=%.2f.", src_pt.x, src_pt.y, curr_angle, dst_pt.x, dst_pt.y, dst_angle);
+-		putText(image, name, Point(25,40) , FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
+-
+-		if (frameCounter % astarFrameCount == 0){
+-			DEBUG(start = clock();)
+-			freePath();
+-			current_path = vector<node *>();
+-			planPath (src_pt, dst_pt, curr_angle2, current_path);
+-			printPath();
+-			DEBUG(cout << "		astar: " << (clock() - start) / (double) CLOCKS_PER_SEC << endl;)
+-		}
+-		drawPath(current_path);
+-
+-	}
+-
+-
+ 	/*
+ 	* rounds the 2D point down to upper left corner of the grid it's in
+ 	*/
+@@ -158,72 +122,66 @@ namespace AStar{
+ 
+ 	}
+ 
+-	/*
+-	* prints current path (actions to perform to reach dst) out to the stdout
++
++	/* 
++	* outputs the path planning information 
++	* and plans new path every astarFrameCount frame 
++	* also draws the path on the image
+ 	*/
+-	void printPath(){
+-		DEBUG(cout << "printing the action sequence" << endl);
++	void planPathOnVideo (Mat &image, Point3f src_pt, Point3f dst_pt, int frameCounter){
+ 
+-		if (!current_path.empty()){
+-			for (int i=0; i<current_path.size(); i++){
+-				DEBUG(cout << ((current_path[i])->move).name << endl;)
+-			}
+-		}
++		//overlay_img = Mat(image.size, CV_64FC1);
+ 
+-	}
++		roundToGridPoint(src_pt, GRID_SIZE);
++		roundToGridPoint(dst_pt, GRID_SIZE);
++		//round curr angle
++		src_pt.z = 0; //TODO//((curr_angle + (M_PI/2-1)) / (M_PI/2)) * (M_PI/2); //rounds to multiple of pi/2
+ 
+-	/*
+-	* frees the data structures used by astar
+-	*/
+-	void freeSets(){
+-		if (!pq.empty()){
+-			for (int i=0; i<pq.size(); i++){
+-				delete pq[i];
+-			}
+-		}
++		char name[100];
++		sprintf(name,"source is: x=%.0f, y=%.0f, th=%.2f. destination is: x=%.0f, y=%.0f, th=%.2f.", src_pt.x, src_pt.y, src_pt.z, dst_pt.x, dst_pt.y, dst_pt.z);
++		putText(image, name, Point(25,40), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
++		char distText[50];
++		double dist = euclidean_dist2D(src_pt, dst_pt);
++		sprintf(distText, "distance from current position to goal: %.02f", dist);
++		putText(image, distText, Point(25,60), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false);
+ 
+-		if (!visited_set.empty()){
+-			for (int i=0; i<visited_set.size(); i++){
+-				delete visited_set[i];
+-			}
++		if (frameCounter % astarFrameCount == 0){
++			DEBUG(cout << "**************** replanning ****************" << endl;)
++			//DEBUG(start = clock();)
++			freePath();
++			current_path = vector<node *>();
++			planPath (src_pt, dst_pt, current_path);
++			//DEBUG(cout << "		astar: " << (clock() - start) / (double) CLOCKS_PER_SEC << endl;)
+ 		}
+-	}
++		drawPath(current_path);
+ 
+-	/*
+-	* frees current path
+-	*/
+-	void freePath(){
+-		if (!current_path.empty()){
+-			for (int i=0; i<current_path.size(); i++){
+-				delete current_path[i];
+-			}
+-		}
+ 	}
+ 
+ 	/*
+ 	* runs Astar
+ 	*/
+-	void planPath(Point src_pt, Point dst_pt, double curr_angle, vector<node *>& path){
++	void planPath(Point3f src_pt, Point3f dst_pt, vector<node *>& path){
+ 
+-		//src = Point3f(src_pt.x, src_pt.y, curr_angle);
+-		dst = Point3f(dst_pt.x, dst_pt.y, curr_angle);
++		dst = dst_pt;
+ 		visited_set = vector<node *>();
+ 		pq = vector<node *>();
+ 
++		cout << "here" << actions[0].name << endl;
++
+ 		//TODO be able to tell if dst is reachable from src
+ 		node *start_node = new node;
+ 		start_node->priority = 0;
+ 		start_node->dist = 0;
+-		start_node->pos = Point3f(src_pt.x, src_pt.y, curr_angle);
++		start_node->pos = src_pt;
+ 		start_node->prev = nullptr;
+-		//move is undefined!
++		//move is undefined at start
+ 		insertPQ(start_node);
+ 
+ 		while (!pq.empty()){
+ 
+ 			node *n = delminPQ();
+ 
+-			if (n->pos.x == dst_pt.x && n->pos.y == dst_pt.y && n->pos.z > final_angle-M_PI/6 && n->pos.z < final_angle+M_PI/6){ //TODO bounds check by quadrants!
++			if (n->pos.x == dst_pt.x && n->pos.y == dst_pt.y && n->pos.z > dst_pt.z-M_PI/6 && n->pos.z < dst_pt.z+M_PI/6){ //TODO bounds check by quadrants!
+ 
+ 					DEBUG(cout << "done astar" << endl;)
+ 					while (n != nullptr){
+@@ -232,6 +190,7 @@ namespace AStar{
+ 						path_node->dist = n->dist;
+ 						path_node->pos = n->pos;
+ 						path_node->move = n->move;
++						//cout << "wtf      " << path_node->move.name << endl;
+ 						path.insert(path.begin(), path_node);
+ 						n = n->prev;
+ 					}
+@@ -260,6 +219,7 @@ namespace AStar{
+ 							new_node->prev = n;
+ 							new_node->move = actions[i];
+ 
++
+ 							insertPQ(new_node);
+ 							//checkPQ();
+ 						}
+@@ -295,6 +255,47 @@ namespace AStar{
+ 
+ 	}
+ 
++	/*
++	* prints current path (actions to perform to reach dst) out to the stdout
++	*/
++	void printPath(){
++		DEBUG(cout << "printing the action sequence" << endl);
++		if (!current_path.empty()){
++			for (int i=0; i<current_path.size(); i++){
++				DEBUG(cout << ((current_path[i])->move).name << endl;)
++			}
++		}
++
++	}
++
++	/*
++	* frees the data structures used by astar
++	*/
++	void freeSets(){
++		if (!pq.empty()){
++			for (int i=0; i<pq.size(); i++){
++				delete pq[i];
++			}
++		}
++
++		if (!visited_set.empty()){
++			for (int i=0; i<visited_set.size(); i++){
++				delete visited_set[i];
++			}
++		}
++	}
++
++	/*
++	* frees current path
++	*/
++	void freePath(){
++		if (!current_path.empty()){
++			for (int i=0; i<current_path.size(); i++){
++				delete current_path[i];
++			}
++		}
++	}
++
+ 
+ 	/* ################# */
+ 	/* graph search methods  */
+@@ -367,6 +368,10 @@ namespace AStar{
+ 		visited_set.insert(visited_set.end(),new_node);
+ 	}
+ 
++	double euclidean_dist2D(Point3f start, Point3f end){
++		return sqrt((start.x-end.x)*(start.x-end.x) + (start.y-end.y)*(start.y-end.y));
++	}
++
+ 	double euclidean_dist(Point3f start, Point3f end){
+ 		return sqrt((start.x-end.x)*(start.x-end.x) + (start.y-end.y)*(start.y-end.y) + (start.z-end.z)*(start.z-end.z));
+ 	}

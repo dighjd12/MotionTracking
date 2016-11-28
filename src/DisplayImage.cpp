@@ -22,10 +22,11 @@ const char original_frame_window[20] = "original frame";
 const char red_thresholded_window[30] = "thresholded by red (hsv)";
 
 int frameCounter = 0;
-const int astarFrameCount = 20;
 
 double dst_angle = M_PI/2; //TODO make this user-specified
 
+// vectors of length = low_pass_length 
+// used for low-pass filter
 vector<double> xData = vector<double>();
 vector<double> yData = vector<double>();
 vector<double> thData = vector<double>();
@@ -33,19 +34,21 @@ vector<double> th2Data = vector<double>();
 int low_pass_length = 10;
 Mat weightsMat;
 
+// mat to record data throughout the session and export to csv
 Mat dataMat;
 
-vector<Point> prev_snake;
+//vector<Point> prev_snake;
 Mat image_orig;
+clock_t start;
 VideoCapture cap;
 
 // indicates that enough points have incremented to run astar
 bool pt_flag = false;
 // indicates that destination point has been specified
 bool dst_flag = false;
-Point curr_pt;
-double curr_angle = 0;
-Point dst_pt;
+Point3f curr_pt;
+//double curr_angle = 0;
+Point3f dst_pt;
 
 //global size object for resizing all images
 int resize_height = 500;
@@ -57,15 +60,11 @@ Size size(resize_width,resize_height);
 // at first, point to where about the snake will be,
 //threshold choosing??
 
-//TODO: !!!!!1!!
 //axis ---> make it consistent, s.t. green one is the longer axis
 
-// a* with states
-//divide using grids, be able to click destination and know where you are.
 // things to consider: (+= bounds for rotation and translation) how to send commands to rotation (watch until it reaches the right angle,,
 //etc), adding more actions, blocking out (or clicking on ) obstacles
 //mix of actions to consider
-//draw/click on obstacles?
 
 int lower_red_lower_bound;
 int lower_red_upper_bound;
@@ -77,25 +76,24 @@ Mat curr_frame;
 bool live = false;
 int numFrameChunk = 500;
 
+/* applies segmenting on the event that
+ threshold values change on gui*/
 void on_trackbar( int, void* ){
 	redAndMoving(curr_frame);
 }
 
-
+/* sets destination point */
 static void setDst( int event, int x, int y, int f, void* ){
 	if  ( event == EVENT_LBUTTONDOWN ){
 		dst_flag = true;
-		Point pt = Point(x,y);
-		dst_pt = pt;
+		dst_pt = Point3f(x,y, dst_angle);
 	}
 
 }
 
-
 int main( int argc, char** argv ) {
 
-	cout << "hello world" << endl;
-
+	DEBUG(cout << "hello world" << endl;)
 	if (argc!=3){ //maybe use flag?
 		cout << "invalid args" << endl;
 		return -1;
@@ -124,19 +122,20 @@ int main( int argc, char** argv ) {
 	upper_red_upper_bound = 179;
 
 	vector<double> weights = vector<double>();
+	double ratio = 1/(double)low_pass_length;
 	for (int i=0; i<low_pass_length; i++){
-		weights.insert(weights.end(), 0.1);  //equal weights now***** TODO!!!!
+		weights.insert(weights.end(), ratio);
 	}
 	weightsMat = Mat(weights, true);
 
-	 namedWindow(original_frame_window, 1);
-	 namedWindow(red_thresholded_window, 1);
+	namedWindow(original_frame_window, 1);
+	namedWindow(red_thresholded_window, 1);
 
-	 int const max_val = 255;
-	 createTrackbar( "lo red, lower bound", red_thresholded_window, &lower_red_lower_bound, max_val, on_trackbar );
-	 createTrackbar( "lo red, upper bound", red_thresholded_window, &lower_red_upper_bound, max_val, on_trackbar );
-	 createTrackbar( "up red, lower bound", red_thresholded_window, &upper_red_lower_bound, max_val, on_trackbar );
-	 createTrackbar( "up red, upper bound", red_thresholded_window, &upper_red_upper_bound, max_val, on_trackbar );
+	int const max_val = 255;
+	createTrackbar( "lo red, lower bound", red_thresholded_window, &lower_red_lower_bound, max_val, on_trackbar );
+	createTrackbar( "lo red, upper bound", red_thresholded_window, &lower_red_upper_bound, max_val, on_trackbar );
+	createTrackbar( "up red, lower bound", red_thresholded_window, &upper_red_lower_bound, max_val, on_trackbar );
+	createTrackbar( "up red, upper bound", red_thresholded_window, &upper_red_upper_bound, max_val, on_trackbar );
 
 	if(!cap.isOpened())  // check if we succeeded
 		return -1;
@@ -154,29 +153,24 @@ int main( int argc, char** argv ) {
 		cap >> frame;
 
 		if (frame.empty()) { //EOF
-			 exportToCSV(dataMat, "dataCSV.csv");
+			 EXPORT(exportToCSV(dataMat, "dataCSV.csv");)
 					  break;
 		}
-
-		/*if (frameCounter < 1300){
-			frameCounter++;
-			continue;
-		}
-		if (frameCounter == 1300){
-			waitKey(0);
-		}*/
 
 		resize(frame,frame,size);
 		curr_frame = frame;
 		image_orig = frame;
 
-		redAndMoving(frame); //threshold + axis drawing
+		DEBUG(start = clock();)
+		redAndMoving(frame); //threshold + pca analysis
+		DEBUG(cout << "duration for vision algs " << (clock() - start) / (double) CLOCKS_PER_SEC << endl;)
 
 		drawGrids(frame, GRID_SIZE);
 		if (pt_flag && dst_flag){
-			planPathOnVideo (frame, curr_pt, dst_pt, curr_angle, dst_angle, frameCounter);
+			DEBUG(start = clock();)
+			planPathOnVideo (frame, curr_pt, dst_pt, frameCounter);
+			DEBUG(cout << "duration for planning algs " << (clock() - start) / (double) CLOCKS_PER_SEC << endl;)
 		}
-		//drawPath();
 		imshow( original_frame_window, frame );
 
 		/* if key pressed is 'f', then will stop and show hsv values of that frame.
@@ -186,7 +180,7 @@ int main( int argc, char** argv ) {
 		if (res % 256 == 102){
 			showImgWithHSV(frame); //TODO when stop, show the picture with the axes on it
 		} else if(res >= 0) {
-			 exportToCSV(dataMat, "dataCSV.csv");
+			EXPORT(exportToCSV(dataMat, "dataCSV.csv");)
 			break;
 		}
 
@@ -197,6 +191,20 @@ int main( int argc, char** argv ) {
 
 }
 
+/* export the matrix into csv file */
+void exportToCSV(Mat &matrix, string filename){
+
+	std::ofstream outputFile(filename);
+	outputFile << format(matrix, "CSV") << endl;
+	outputFile.close();
+
+}
+
+/* 
+******************************
+********** CV codes **********
+******************************
+*/
 
 /* processes the frame.
  * */
@@ -225,13 +233,6 @@ void redAndMoving(Mat frame){
 
 }
 
-void exportToCSV(Mat &matrix, string filename){
-
-	std::ofstream outputFile(filename);
-	outputFile << format(matrix, "CSV") << endl;
-	outputFile.close();
-
-}
 
 /* does pca analysis using the set of input points,
  * and draws the axis and center on the input img */
@@ -270,8 +271,6 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     double angle = atan2(eigen_vecs[0].y, eigen_vecs[0].x); // orientation in radians
     double angle2 = atan2(eigen_vecs[1].y, eigen_vecs[1].x); //angle of our second principal axis
 
-   // cout << angle << " " << angle2 << endl;
-
     //axis might jump around. add pi to angles that are about opposite from previous angles explicitly
     if (thData.size() != 0){
 
@@ -307,9 +306,7 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
 			}else if (angle > 0 && angle < prev_val + bounds){
 				//within bounds
 			}else{
-			//	cout << "angle changed4!! " << angle << endl;
 				angle = angle + M_PI;
-				//cout << "				 to " << angle << endl;
 			}
 		}
 
@@ -320,24 +317,9 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
 			}else if (angle < 0 && angle < prev_val + bounds){
 				//within bounds
 			}else{
-				//cout << "angle changed3!! " << angle << endl;
 				angle = angle + M_PI;
-				//cout << "				 to " << angle << endl;
 			}
 		}
-
-    	/*double tempPrev = thData.at(thData.size()-1) - 2*M_PI;
-    	double temp = angle; //these in -180 to 180
-
-    	//if (tempPrev < -M_PI/2)
-    	if (angle > 0){
-    		temp = angle - 2*M_PI;
-    	}else{
-    		temp = angle - 2*M_PI;
-    	}
-
-    	if (tempPrev+M_PI/2)
-    	angle = angle+M_PI;*/
     }
 
     if (th2Data.size() != 0){
@@ -348,39 +330,27 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
       	//first quad
       	if (prev_val >= 0 && prev_val <= M_PI/2){
       		if (angle2 <= 0 && angle2 > prev_val-bounds){
-      			//within bounds
       		}else if (angle2 > 0 && angle2 < prev_val + bounds){
-      			//within bounds
       		}else{
-      			//cout << "angle2 changed1!! " << angle2 << endl;
       			angle2 = angle2 + M_PI;
-      			//cout << "				 to " << angle2 << endl;
       		}
       	}
 
       	//second quad
       	if (prev_val > M_PI/2 && prev_val <= M_PI){
   			if (angle2 <= 0 && angle2 < prev_val + bounds - 2*M_PI){
-  				//within bounds
   			}else if (angle2 > 0 && angle2 > prev_val - bounds){
-  				//within bounds
   			}else{
-  				//cout << "angle2 changed2!! " << angle2 << endl;
   				angle2 = angle2 + M_PI;
-  				//cout << "				 to " << angle2 << endl;
   			}
   		}
 
       	//fourth quad
   		if (prev_val < 0 && prev_val >= -M_PI/2){
   			if (angle2 <= 0 && angle2 > prev_val - bounds){
-  				//within bounds
   			}else if (angle2 > 0 && angle2 < prev_val + bounds){
-  				//within bounds
   			}else{
-  				//cout << "angle2 changed4!! " << angle2 << endl;
   				angle2 = angle2 + M_PI;
-  				//cout << "				 to " << angle2 << endl;
   			}
   		}
 
@@ -409,6 +379,7 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
 	angle2 =  angle2 - M_PI;
 
 	/* record data */
+    EXPORT(
     if (dataMat.rows <= frameCounter){
     	Mat temp;
     	copyMakeBorder(dataMat, temp, 0, numFrameChunk, 0, 0, BORDER_CONSTANT, 0 );
@@ -418,6 +389,7 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     dataMat.at <double>(frameCounter, 1) = cntr.y;
     dataMat.at <double> (frameCounter, 2) = angle; // radians
     dataMat.at <double> (frameCounter, 3) = angle * 180/M_PI; //degrees
+    )
 
     /* low pass filter */
     if (xData.size() < low_pass_length){
@@ -444,10 +416,10 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     		double avg_th2 = weightsMat.dot(Mat(th2Data,true));
 
     		cntr = Point(avg_x, avg_y);
-    		curr_pt = Point(avg_x, avg_y);
     		angle = avg_th;
-    		curr_angle = angle;
+    		//curr_angle = angle;
     		angle2 = avg_th2;
+    		curr_pt = Point3f(avg_x, avg_y, angle);
 
     		 /* draw the principal components */
 			circle(img, cntr, 3, Scalar(255, 0, 255), 2);
