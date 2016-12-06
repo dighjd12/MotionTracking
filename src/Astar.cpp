@@ -17,6 +17,7 @@ namespace AStar{
 	using namespace std;
 
 	int GRID_SIZE = 40;
+	float ANGLE_SIZE = M_PI/4;
 
 	// change resolution ++ frame rate
 
@@ -26,28 +27,26 @@ namespace AStar{
 
 	// time the rotation
 	// DEMO - estimate how far it moved / seqs of movements
-	// as we drive, distnace reduce
+	// as we drive, distance reduce
 	// cam looking at robot, move the robot according to the path/actions
 
 	// overlay transparent image and draw on it!!
-	// rotation + final dst angle* bugg...... TODO
+	// informations..
 
 	// state, bounds for rotation
 	// astar in snake frame
 	// obstacles?
 
 	// implement on the snake .. order rotation + cost for motions/actions
-	// simulations ? testing
-
 
 	Point3f dst; //used by heuristics 
 
 	vector<node *> current_path;
-	const int astarFrameCount = 20;
+	const int astarFrameCount = 10;
 
 	action roll, rotate, forward;
 	action actions[3];
-	void makeActions (void) __attribute__((constructor)); //calls makeActions before main
+	//void makeActions (void) __attribute__((constructor)); //calls makeActions before main
 
 	vector<node*> pq;
 	vector<node*> visited_set;
@@ -135,26 +134,107 @@ namespace AStar{
 		roundToGridPoint(src_pt, GRID_SIZE);
 		roundToGridPoint(dst_pt, GRID_SIZE);
 		//round curr angle
-		src_pt.z = 0; //TODO//((curr_angle + (M_PI/2-1)) / (M_PI/2)) * (M_PI/2); //rounds to multiple of pi/2
+		roundAngle(src_pt, ANGLE_SIZE/2);
 
 		char name[100];
-		sprintf(name,"source is: x=%.0f, y=%.0f, th=%.2f. destination is: x=%.0f, y=%.0f, th=%.2f.", src_pt.x, src_pt.y, src_pt.z, dst_pt.x, dst_pt.y, dst_pt.z);
-		putText(image, name, Point(25,40), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
+		sprintf(name,"source is: x=%.0f, y=%.0f, th=%.3f. destination is: x=%.0f, y=%.0f, th=%.2f.", src_pt.x, src_pt.y, degree(src_pt.z), dst_pt.x, dst_pt.y, degree(dst_pt.z));
+		putText(image, name, Point(25,40), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false);
 		char distText[50];
 		double dist = euclidean_dist2D(src_pt, dst_pt);
 		sprintf(distText, "distance from current position to goal: %.02f", dist);
 		putText(image, distText, Point(25,60), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false);
 
+		//if on the path and dst is still same, no need to replan
+		if (inPath(src_pt) && dst.x == dst_pt.x && dst.y == dst_pt.y && inBoundsAngle(dst_pt.z, dst.z, M_PI/4)){
+			cout << "&&&&&&&&&&&&&& inpath &&&&&&&&&&&&&&&&" << endl;
+			putText(image, "INPATH", Point(25,80), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
+			drawPath(current_path);
+			return;
+		}
+
 		if (frameCounter % astarFrameCount == 0){
-			DEBUG(cout << "**************** replanning ****************" << endl;)
-			//DEBUG(start = clock();)
+			cout << "**************** replanning ****************" << endl;
+			putText(image, "REPLANNED", Point(25,80), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
 			freePath();
+			dst = dst_pt;
 			current_path = vector<node *>();
 			planPath (src_pt, dst_pt, current_path);
-			//DEBUG(cout << "		astar: " << (clock() - start) / (double) CLOCKS_PER_SEC << endl;)
 		}
 		drawPath(current_path);
 
+	}
+
+	bool inBoundsXY(Point3f path_pt, Point3f src_pt, int error_size){
+
+		float error = error_size*GRID_SIZE;
+		//cout << " error " << error << " ";
+		//cout << " path " << path_pt.x << " " << path_pt.y << " src_pt " << src_pt.x << " " << src_pt.y << endl;
+		return (path_pt.x + error >= src_pt.x && path_pt.x - error <= src_pt.x
+			&& path_pt.y + error >= src_pt.y && path_pt.y - error <= src_pt.y);
+
+	}
+
+	bool inPath(Point3f src_pt){
+		if (current_path.empty()) return false;
+		//float x = src_pt.x;
+		//float y = src_pt.y;
+		//bool flag = false;
+		int curr = -1;
+
+		//TODO ANGLE
+
+		for (int i=0; i<current_path.size(); i++){
+			
+			if (inBoundsXY(current_path[i]->pos, src_pt, 1)){
+				//cout << "in bounds!!" << endl;
+				//flag = true;
+				if (current_path[i]->move.name == "rotate"){
+					//check if angle is working
+					float curr_diff = (dst.z - src_pt.z);
+					float orig_diff = (dst.z - current_path[i]->pos.z);
+					//TEST THIS TODO
+					if (inBoundsAngle(curr_diff, 0, M_PI/4)){
+						curr = i+1;
+						break;
+					}
+
+					if (abs(curr_diff) <= abs(orig_diff)){
+						curr = i;
+						break;
+					}
+					//if angle diff is not decreasing, decide out of path..
+					return false;
+
+				} else {
+					curr = i;
+					break;
+				}	
+			}
+		}
+
+		if (curr >= 0){
+			while (curr > 0){ //delete curr-1 elems from front
+				delete current_path[0];
+				current_path.erase (current_path.begin());
+				curr--;
+			}
+			return true;
+		}
+
+		return false;
+
+	}
+
+	/* round the angle to nearest */
+	void roundAngle(Point3f &pt, float roundTo){
+
+		float halfRound = roundTo/2.0;
+		float temp = pt.z >= 0 ? (pt.z + halfRound) : (pt.z - halfRound);
+
+		float new_angle = ((int)(temp / roundTo)) * roundTo;
+		//cout << " angle " << pt.z << " new " << new_angle << endl;
+		pt.z = new_angle;
+		//cout << " ??????? "<< pt.z << endl;
 	}
 
 	/*
@@ -162,11 +242,9 @@ namespace AStar{
 	*/
 	void planPath(Point3f src_pt, Point3f dst_pt, vector<node *>& path){
 
-		dst = dst_pt;
+		
 		visited_set = vector<node *>();
 		pq = vector<node *>();
-
-		cout << "here" << actions[0].name << endl;
 
 		//TODO be able to tell if dst is reachable from src
 		node *start_node = new node;
@@ -180,8 +258,10 @@ namespace AStar{
 		while (!pq.empty()){
 
 			node *n = delminPQ();
+			//cout << "node: " << n->pos.x << " " << n->pos.y << " " << n->pos.z << endl;
+			//cout << " dst " << dst_pt.x << " " << dst_pt.y << " " << endl;
 
-			if (n->pos.x == dst_pt.x && n->pos.y == dst_pt.y && n->pos.z > dst_pt.z-M_PI/6 && n->pos.z < dst_pt.z+M_PI/6){ //TODO bounds check by quadrants!
+			if (inBoundsXY(n->pos, dst_pt, 1) && inBoundsAngle(n->pos.z, dst_pt.z, M_PI/4)){
 
 					DEBUG(cout << "done astar" << endl;)
 					while (n != nullptr){
@@ -231,6 +311,10 @@ namespace AStar{
 		}
 	}
 
+	bool inBoundsAngle(float curr_angle, float dst_angle, float bound){
+		return (curr_angle >= dst_angle-bound && curr_angle <= dst_angle+bound);
+	}
+
 	/*
 	* draws path on the current frame 
 	* if _DEBUG is defined, prints the action sequence to stdout
@@ -238,13 +322,12 @@ namespace AStar{
 	void drawPath(vector<node *> path){
 
 		if (path.empty()) return;
-
 		for (int j = 0; j < path.size()-1; j++){
 			if (path[j]->pos.x == path[j+1]->pos.x && path[j]->pos.y == path[j+1]->pos.y){
 				//rotation
 				circle(image_orig, Point(path[j]->pos.x, path[j]->pos.y), 3, Scalar(255, 0, 255), 2);
 				char name[25];
-				sprintf(name,"rotate %.2f", path[j+1]->pos.z - path[j]->pos.z);
+				sprintf(name,"rotate %.2f", degree(path[j+1]->pos.z - path[j]->pos.z));
 				putText(image_orig, name, Point(path[j]->pos.x, path[j]->pos.y-5), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,0,255), 2,8,false );
 				DEBUG(cout << name << endl;)
 			}else{
@@ -333,6 +416,10 @@ namespace AStar{
 
 	}
 
+	float degree(float rad){
+		return rad*180.0/M_PI;
+	}
+
 	//call only if pq is not empty!
 	node *delminPQ(){
 
@@ -396,44 +483,74 @@ namespace AStar{
 	vector<Point3f> rotate_succ (Point3f curr){ //TODO: currently only 4-way connected, assuming th is aligned with one of the axes.
 
 		/* [-180, 180] normalization for angles */
-		double angle = curr.z + M_PI/2;
-		angle = fmod(angle + M_PI,2*M_PI);
-		if (angle < 0)
-			angle += 2*M_PI;
-		angle =  angle - M_PI;
-		Point3f p1 = Point3f(curr.x, curr.y, angle);
+		vector<Point3f> v1 = vector<Point3f>();
+		
 
-		angle = curr.z - M_PI/2;
-		angle = fmod(angle + M_PI,2*M_PI);
-		if (angle < 0)
-			angle += 2*M_PI;
-		angle =  angle - M_PI;
-		Point3f p2 = Point3f(curr.x, curr.y, angle);
+		float angle = 0;
+		while (angle <= M_PI){
 
-		angle = curr.z + M_PI;
-		angle = fmod(angle + M_PI,2*M_PI);
-		if (angle < 0)
-			angle += 2*M_PI;
-		angle =  angle - M_PI;
-		Point3f p3 = Point3f(curr.x, curr.y, angle);
+			Point3f p1 = Point3f(curr.x, curr.y, angle);
+			//roundToGridPoint(p1, GRID_SIZE);
+			//cout << " " << p1.z << endl;
+			v1.insert(v1.begin(), p1);
 
-		angle = curr.z - M_PI;
+			angle += ANGLE_SIZE;
+		}
+
+		angle = 0;
+		while (angle >= M_PI){
+
+			Point3f p1 = Point3f(curr.x, curr.y, angle);
+			//cout << " " << p1.z << endl;
+			//roundToGridPoint(p1, GRID_SIZE);
+			v1.insert(v1.begin(), p1);
+
+			angle -= ANGLE_SIZE;
+		}
+
+		return v1;
+		/*
+		double angle = curr.z + ANGLE_SIZE;
 		angle = fmod(angle + M_PI,2*M_PI);
 		if (angle < 0)
 			angle += 2*M_PI;
 		angle =  angle - M_PI;
-		Point3f p4 = Point3f(curr.x, curr.y, angle);
+		Point3f p1 = Point3f(curr.x, curr.y, ANGLE_SIZE);
+
+		angle = curr.z - ANGLE_SIZE;
+		angle = fmod(angle + M_PI,2*M_PI);
+		if (angle < 0)
+			angle += 2*M_PI;
+		angle =  angle - M_PI;
+		Point3f p2 = Point3f(curr.x, curr.y, -ANGLE_SIZE);
+
+		angle = curr.z + ANGLE_SIZE;
+		angle = fmod(angle + M_PI,2*M_PI);
+		if (angle < 0)
+			angle += 2*M_PI;
+		angle =  angle - M_PI;
+		Point3f p3 = Point3f(curr.x, curr.y, 2*ANGLE_SIZE);
+
+		angle = curr.z - ANGLE_SIZE;
+		angle = fmod(angle + M_PI,2*M_PI);
+		if (angle < 0)
+			angle += 2*M_PI;
+		angle =  angle - M_PI;
+		Point3f p4 = Point3f(curr.x, curr.y, -2*ANGLE_SIZE);
 
 		roundToGridPoint(p1, GRID_SIZE);
 		roundToGridPoint(p2, GRID_SIZE);
 		roundToGridPoint(p3, GRID_SIZE);
 		roundToGridPoint(p4, GRID_SIZE);
+
+		cout << " " << p1.z << " " <<p2.z << " " <<p3.z << " " <<p4.z << endl;
+
 		vector<Point3f> v1 = vector<Point3f>();
 		v1.insert(v1.begin(), p1);
 		v1.insert(v1.begin(), p2);
 		v1.insert(v1.begin(), p3);
-		v1.insert(v1.begin(), p4);
-		return v1;
+		v1.insert(v1.begin(), p4);*/
+		
 	}
 
 	vector<Point3f> roll_succ (Point3f curr){ //orientation head of our snake (rad)

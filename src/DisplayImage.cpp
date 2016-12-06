@@ -31,7 +31,7 @@ vector<double> xData = vector<double>();
 vector<double> yData = vector<double>();
 vector<double> thData = vector<double>();
 vector<double> th2Data = vector<double>();
-int low_pass_length = 10;
+int low_pass_length = 15;
 Mat weightsMat;
 
 // mat to record data throughout the session and export to csv
@@ -59,6 +59,12 @@ Size size(resize_width,resize_height);
 // connected components? masking the background, ml to optimize the thresholding
 // at first, point to where about the snake will be,
 //threshold choosing??
+
+//downsampling
+
+//robot watching the robot
+
+//have the webcam watch the robot from far, remove all objects that interfere with thresholding
 
 //axis ---> make it consistent, s.t. green one is the longer axis
 
@@ -107,7 +113,7 @@ int main( int argc, char** argv ) {
 	}
 
 	if (live){
-		cap = VideoCapture(0);
+		cap = VideoCapture(1);
 		dataMat = Mat(numFrameChunk, 4,  CV_64FC1);
 	}else{
 		cap = VideoCapture(argv[2]); // open the video
@@ -115,16 +121,19 @@ int main( int argc, char** argv ) {
 
 		dataMat = Mat(numFrames, 4,  CV_64FC1);
 	}
+	//cap.set(CV_CAP_PROP_FRAME_WIDTH,640);
+	//cap.set(CV_CAP_PROP_FRAME_HEIGHT,480);
 
 	lower_red_lower_bound = 0;
 	lower_red_upper_bound = 15;
 	upper_red_lower_bound = 165;
 	upper_red_upper_bound = 179;
 
+	//weighted moving average
 	vector<double> weights = vector<double>();
-	double ratio = 1/(double)low_pass_length;
-	for (int i=0; i<low_pass_length; i++){
-		weights.insert(weights.end(), ratio);
+	//double ratio = 1/(double)low_pass_length;
+	for (int i=1; i<=low_pass_length; i++){
+		weights.insert(weights.end(), i);
 	}
 	weightsMat = Mat(weights, true);
 
@@ -141,7 +150,7 @@ int main( int argc, char** argv ) {
 		return -1;
 
 	setMouseCallback( original_frame_window, setDst, 0 );
-
+	makeActions();
 	/* loops through the video and processes the images.
 	 * there will be three windows:
 	 * 		1) binary frame that shows the motion of the robot.
@@ -215,12 +224,18 @@ void redAndMoving(Mat frame){
 	Mat image_blurred;
 	Mat image_threshed;
 	Mat image_final;
+	clock_t temp;
 
+	DEBUG(temp = clock();)
 	blurImg(image_orig, image_blurred, blur_kernel_length);
+	DEBUG(cout << "duration for blurring " << (clock() - temp) / (double) CLOCKS_PER_SEC << endl;)
+
+	DEBUG(temp = clock();)
 	thresholdImgByHSV(image_blurred, image_threshed);
+	DEBUG(cout << "duration for thresholding " << (clock() - temp) / (double) CLOCKS_PER_SEC << endl;)
+
 	int dilation_type = MORPH_ELLIPSE;
 	int dilation_size = 2;
-
 	Mat element_thresh = getStructuringElement( dilation_type,
 									   Size( 2*dilation_size + 1, 2*dilation_size+1 ),
 									   Point( dilation_size, dilation_size ) );
@@ -229,7 +244,9 @@ void redAndMoving(Mat frame){
 
 	/* find and draw contours on the original image,
 	 * given the thresholded image*/
+	DEBUG(temp = clock();)
 	findAndDrawContours (image_final, frame);
+	DEBUG(cout << "duration for segmentation and contouring " << (clock() - temp) / (double) CLOCKS_PER_SEC << endl;)
 
 }
 
@@ -410,13 +427,19 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     		thData.insert(thData.end(), angle + 2*M_PI);
     		th2Data.insert(th2Data.end(), angle2 + 2*M_PI);
 
-    		double avg_x = weightsMat.dot(Mat(xData,true));
-    		double avg_y = weightsMat.dot(Mat(yData,true));
-    		double avg_th = weightsMat.dot(Mat(thData,true));
-    		double avg_th2 = weightsMat.dot(Mat(th2Data,true));
+    		double denom = (low_pass_length*(low_pass_length+1))/2;
+
+    		double avg_x = (weightsMat.dot(Mat(xData,true)))/denom;
+    		double avg_y = (weightsMat.dot(Mat(yData,true)))/denom;
+    		double avg_th = (weightsMat.dot(Mat(thData,true)))/denom;
+    		double avg_th2 = (weightsMat.dot(Mat(th2Data,true)))/denom;
 
     		cntr = Point(avg_x, avg_y);
     		angle = avg_th;
+    		angle = fmod(angle + M_PI,2*M_PI);
+			if (angle < 0)
+				angle += 2*M_PI;
+			angle =  angle - M_PI;
     		//curr_angle = angle;
     		angle2 = avg_th2;
     		curr_pt = Point3f(avg_x, avg_y, angle);
@@ -564,13 +587,18 @@ int blurImg(Mat& src, Mat& dst, int kernel_size){
 /* thresholds the src image using hsv hues of red, and stores in dst image */
 int thresholdImgByHSV (Mat& src, Mat& dst) {
 
-	Mat lower_red;
+	//yellow thresholding
+	inRange(src, Scalar(20, 30, 50), Scalar(35, 255, 255), dst);
+
+	//red thresholding
+	
+	/*Mat lower_red;
 	Mat upper_red;
 
 	inRange(src, Scalar(lower_red_lower_bound, 50, 50), Scalar(lower_red_upper_bound, 150, 150), lower_red);
 	inRange(src, Scalar(upper_red_lower_bound, 30, 30), Scalar(upper_red_upper_bound, 255, 255), upper_red);
 
 	bitwise_or(lower_red, upper_red, dst);
-
+	*/
 	return 0;
 }

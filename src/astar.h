@@ -29,6 +29,9 @@ struct node{
 };
 
     //void setDst( int event, int x, int y, int f, void* );
+	bool inPath(Point3f src_pt);
+	bool inBoundsXY(Point3f path_pt, Point3f src_pt, int error_size);
+	void makeActions();
 	void planPath(Point3f src, Point3f dst, vector<node *>& path);
 	void planPathOnVideo (Mat &image, Point3f src_pt, Point3f dst_pt, int frameCounter);
 	void drawGrids(Mat &image, int grid_size);
@@ -53,6 +56,9 @@ struct node{
 	bool visited(Point3f pt);
 	bool isValid (Point3f start, Point3f end);
 	void roundToGridPoint(Point3f &pt, int grid_size);
+	void roundAngle(Point3f &pt, float roundTo);
+	bool inBoundsAngle(float curr_angle, float dst_angle, float bound);
+	float degree(float rad);
 
 }
 #endif /* ASTAR_H_ */
