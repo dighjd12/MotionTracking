@@ -18,6 +18,7 @@ namespace AStar{
 
 	int GRID_SIZE = 40;
 	float ANGLE_SIZE = M_PI/4;
+	float ANGLE_ERROR = M_PI/6;
 
 	// change resolution ++ frame rate
 
@@ -40,6 +41,7 @@ namespace AStar{
 	// implement on the snake .. order rotation + cost for motions/actions
 
 	Point3f dst; //used by heuristics 
+	Point3f src; //original source, used by inPath
 
 	vector<node *> current_path;
 	const int astarFrameCount = 10;
@@ -134,7 +136,7 @@ namespace AStar{
 		roundToGridPoint(src_pt, GRID_SIZE);
 		roundToGridPoint(dst_pt, GRID_SIZE);
 		//round curr angle
-		roundAngle(src_pt, ANGLE_SIZE/2);
+		roundAngle(src_pt, ANGLE_SIZE);
 
 		char name[100];
 		sprintf(name,"source is: x=%.0f, y=%.0f, th=%.3f. destination is: x=%.0f, y=%.0f, th=%.2f.", src_pt.x, src_pt.y, degree(src_pt.z), dst_pt.x, dst_pt.y, degree(dst_pt.z));
@@ -157,6 +159,7 @@ namespace AStar{
 			putText(image, "REPLANNED", Point(25,80), FONT_HERSHEY_SIMPLEX, .7, Scalar(255,255,255), 2,8,false );
 			freePath();
 			dst = dst_pt;
+			src = src_pt;
 			current_path = vector<node *>();
 			planPath (src_pt, dst_pt, current_path);
 		}
@@ -175,49 +178,70 @@ namespace AStar{
 	}
 
 	bool inPath(Point3f src_pt){
+
 		if (current_path.empty()) return false;
-		//float x = src_pt.x;
-		//float y = src_pt.y;
-		//bool flag = false;
 		int curr = -1;
 
 		//TODO ANGLE
-
 		for (int i=0; i<current_path.size(); i++){
 			
 			if (inBoundsXY(current_path[i]->pos, src_pt, 1)){
-				//cout << "in bounds!!" << endl;
-				//flag = true;
-				if (current_path[i]->move.name == "rotate"){
+				if (current_path[i]->move.name == "rotate"){// || (current_path[i]->move.name != "forward" && current_path[i]->move.name != "roll")){
 					//check if angle is working
 					float curr_diff = (dst.z - src_pt.z);
-					float orig_diff = (dst.z - current_path[i]->pos.z);
+					float orig_diff = (dst.z - src.z); 
 					//TEST THIS TODO
-					if (inBoundsAngle(curr_diff, 0, M_PI/4)){
+
+					cout << " DIFF: " << degree(curr_diff) << " " << degree(orig_diff) << endl;
+					if (inBoundsAngle(curr_diff, 0, ANGLE_ERROR)){
 						curr = i+1;
+						cout << " angle reached!" << endl;
+						waitKey(0);
 						break;
 					}
 
 					if (abs(curr_diff) <= abs(orig_diff)){
 						curr = i;
+						cout << " here!! curr: " << curr << endl;
+						for (int i=0; i<current_path.size(); i++){
+							cout << " " << current_path[i]->move.name << endl;
+						}
+						waitKey(0);
 						break;
 					}
 					//if angle diff is not decreasing, decide out of path..
+					cout << "no.. replan!!" << endl;
+					waitKey(0);
 					return false;
 
 				} else {
-					curr = i;
-					break;
+					curr = i;//i+1;
 				}	
+			}else {
+				break;
 			}
 		}
+		cout << "curr: " << curr << endl;
 
 		if (curr >= 0){
-			while (curr > 0){ //delete curr-1 elems from front
+			while (curr > 0){ //delete curr-1 elems from the front
 				delete current_path[0];
 				current_path.erase (current_path.begin());
 				curr--;
 			}
+
+			if (current_path.empty()){
+				float curr_diff = (dst.z - src_pt.z);
+				if (inBoundsAngle(curr_diff, 0, ANGLE_ERROR)){
+					cout << "DONE!!" << endl;
+					dst_flag = false;
+					waitKey(0);
+				}else {
+					return false;
+				}
+				//TODO remove astar
+			}
+
 			return true;
 		}
 
@@ -252,6 +276,7 @@ namespace AStar{
 		start_node->dist = 0;
 		start_node->pos = src_pt;
 		start_node->prev = nullptr;
+		start_node->move = actions[0];
 		//move is undefined at start
 		insertPQ(start_node);
 
@@ -270,7 +295,7 @@ namespace AStar{
 						path_node->dist = n->dist;
 						path_node->pos = n->pos;
 						path_node->move = n->move;
-						//cout << "????? " << (n->move).name << endl;
+						//cout << "????? " << (path_node->move).name << endl;
 						path.insert(path.begin(), path_node);
 						n = n->prev;
 					}

@@ -138,13 +138,13 @@ int main( int argc, char** argv ) {
 	weightsMat = Mat(weights, true);
 
 	namedWindow(original_frame_window, 1);
-	namedWindow(red_thresholded_window, 1);
+	//namedWindow(red_thresholded_window, 1);
 
 	int const max_val = 255;
-	createTrackbar( "lo red, lower bound", red_thresholded_window, &lower_red_lower_bound, max_val, on_trackbar );
-	createTrackbar( "lo red, upper bound", red_thresholded_window, &lower_red_upper_bound, max_val, on_trackbar );
-	createTrackbar( "up red, lower bound", red_thresholded_window, &upper_red_lower_bound, max_val, on_trackbar );
-	createTrackbar( "up red, upper bound", red_thresholded_window, &upper_red_upper_bound, max_val, on_trackbar );
+	//createTrackbar( "lo red, lower bound", red_thresholded_window, &lower_red_lower_bound, max_val, on_trackbar );
+	//createTrackbar( "lo red, upper bound", red_thresholded_window, &lower_red_upper_bound, max_val, on_trackbar );
+	//createTrackbar( "up red, lower bound", red_thresholded_window, &upper_red_lower_bound, max_val, on_trackbar );
+	//createTrackbar( "up red, upper bound", red_thresholded_window, &upper_red_upper_bound, max_val, on_trackbar );
 
 	if(!cap.isOpened())  // check if we succeeded
 		return -1;
@@ -240,7 +240,7 @@ void redAndMoving(Mat frame){
 									   Size( 2*dilation_size + 1, 2*dilation_size+1 ),
 									   Point( dilation_size, dilation_size ) );
 	dilate(image_threshed, image_final, element_thresh);
-	imshow(red_thresholded_window, image_final);
+	//imshow(red_thresholded_window, image_final);
 
 	/* find and draw contours on the original image,
 	 * given the thresholded image*/
@@ -427,12 +427,50 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     		thData.insert(thData.end(), angle + 2*M_PI);
     		th2Data.insert(th2Data.end(), angle2 + 2*M_PI);
 
+			vector<double> thPrime = vector<double>();
+    		vector<double> th2Prime = vector<double>();
+    		thPrime.insert(thPrime.end(), thData[0]);
+    		th2Prime.insert(th2Prime.end(), th2Data[0]);
+    		for (int i=1; i<low_pass_length; i++){
+    			if ((thData[i]-thPrime[i-1]) < -M_PI/2){
+    				thPrime.insert(thPrime.end(), thData[i] + 2*M_PI);
+    			}
+    			else if ((thData[i]- (thPrime[i-1]) > M_PI/2)){
+    				thPrime.insert(thPrime.end(), thData[i] - 2*M_PI);
+    			}else {
+    				thPrime.insert(thPrime.end(), thData[i]);
+    			}
+    			if ((th2Data[i]-th2Prime[i-1]) < -M_PI){
+    				th2Prime.insert(th2Prime.end(), th2Data[i] + 2*M_PI);
+    				//th2Prime[i] = th2Data[i] + 2*M_PI;
+    			}
+    			else if ((th2Data[i]- (th2Prime[i-1]) > M_PI)){
+    				th2Prime.insert(th2Prime.end(), th2Data[i] - 2*M_PI);
+    				//th2Prime[i] = th2Data[i] - 2*M_PI;
+    			}else {
+    				th2Prime.insert(th2Prime.end(), th2Data[i]);
+    			}
+    		}
+    	/*	for (int i=1; i<low_pass_length; i++){
+    			cout << " " << thData[i] << " vs " << thPrime[i];
+    		}
+    		cout << endl;
+    		for (int i=1; i<low_pass_length; i++){
+    			cout << " " << th2Data[i] << " vs " << th2Prime[i];
+    		}
+    		cout << endl;*/
+    		
+    		
+    		//cout << thPrime.size() << endl;
+
     		double denom = (low_pass_length*(low_pass_length+1))/2;
 
     		double avg_x = (weightsMat.dot(Mat(xData,true)))/denom;
     		double avg_y = (weightsMat.dot(Mat(yData,true)))/denom;
-    		double avg_th = (weightsMat.dot(Mat(thData,true)))/denom;
-    		double avg_th2 = (weightsMat.dot(Mat(th2Data,true)))/denom;
+    		//double avg_th = (weightsMat.dot(Mat(thData,true)))/denom;
+    		//double avg_th2 = (weightsMat.dot(Mat(th2Data,true)))/denom;
+    		double avg_th = (weightsMat.dot(Mat(thPrime,true)))/denom;
+    		double avg_th2 = (weightsMat.dot(Mat(th2Prime,true)))/denom;
 
     		cntr = Point(avg_x, avg_y);
     		angle = avg_th;
@@ -442,7 +480,32 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
 			angle =  angle - M_PI;
     		//curr_angle = angle;
     		angle2 = avg_th2;
+    		angle2 = fmod(angle2 + M_PI,2*M_PI);
+			if (angle2 < 0)
+				angle2 += 2*M_PI;
+			angle2 =  angle2 - M_PI;
     		curr_pt = Point3f(avg_x, avg_y, angle);
+
+    		   
+    	/*	if (!inBoundsAngle(angle2, angle, M_PI/2+1.0)){
+    			cout << "angles : " << angle << " " << angle2 << endl; 
+    			//cout << "angles : " << angle3 << " " << angle4 << endl; 
+    			cout << "*****************here!!!!!!!!!!!!!!!!!! "<< endl;
+    			for (int i=0; i<low_pass_length; i++)
+    				cout << ", " << thData[i];
+    			cout << endl;
+    			for (int i=0; i<low_pass_length; i++)
+    				cout << ", " << thPrime[i];
+    			cout << endl;
+
+    			for (int i=0; i<low_pass_length; i++)
+    				cout << ", " << th2Data[i];
+    			cout << endl;
+    			for (int i=0; i<low_pass_length; i++)
+    				cout << ", " << th2Prime[i];
+    			cout << endl;
+    			waitKey(0);
+    		}*/
 
     		 /* draw the principal components */
 			circle(img, cntr, 3, Scalar(255, 0, 255), 2);

@@ -16,6 +16,7 @@ using namespace std;
 extern int GRID_SIZE;
 struct action{
 	string name;
+	
 	double (*cost) (Point3f, Point3f); //returns the cost given the start and the end
 	vector<Point3f> (*succ) (Point3f); //returns the possible successors as vector
 } ; //one more function pointer that basically 'commands' the move given start and end
