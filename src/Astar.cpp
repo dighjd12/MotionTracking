@@ -516,35 +516,29 @@ namespace AStar{
 			angle += 2*M_PI;
 		angle =  angle - M_PI;
 		Point3f p1 = Point3f(curr.x, curr.y, ANGLE_SIZE);
-
 		angle = curr.z - ANGLE_SIZE;
 		angle = fmod(angle + M_PI,2*M_PI);
 		if (angle < 0)
 			angle += 2*M_PI;
 		angle =  angle - M_PI;
 		Point3f p2 = Point3f(curr.x, curr.y, -ANGLE_SIZE);
-
 		angle = curr.z + ANGLE_SIZE;
 		angle = fmod(angle + M_PI,2*M_PI);
 		if (angle < 0)
 			angle += 2*M_PI;
 		angle =  angle - M_PI;
 		Point3f p3 = Point3f(curr.x, curr.y, 2*ANGLE_SIZE);
-
 		angle = curr.z - ANGLE_SIZE;
 		angle = fmod(angle + M_PI,2*M_PI);
 		if (angle < 0)
 			angle += 2*M_PI;
 		angle =  angle - M_PI;
 		Point3f p4 = Point3f(curr.x, curr.y, -2*ANGLE_SIZE);
-
 		roundToGridPoint(p1, GRID_SIZE);
 		roundToGridPoint(p2, GRID_SIZE);
 		roundToGridPoint(p3, GRID_SIZE);
 		roundToGridPoint(p4, GRID_SIZE);
-
 		cout << " " << p1.z << " " <<p2.z << " " <<p3.z << " " <<p4.z << endl;
-
 		vector<Point3f> v1 = vector<Point3f>();
 		v1.insert(v1.begin(), p1);
 		v1.insert(v1.begin(), p2);

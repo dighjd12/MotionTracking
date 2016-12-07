@@ -14,8 +14,9 @@ using namespace std;
 
 extern Mat image_orig;
 extern clock_t start;
+extern bool dst_flag;
 
-//#define _DEBUG //if we want to print debug statements to stdout
+#define _DEBUG //if we want to print debug statements to stdout
 #ifdef _DEBUG
 #define DEBUG(x) x
 #else 

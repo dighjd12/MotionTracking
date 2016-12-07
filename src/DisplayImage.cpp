@@ -31,7 +31,7 @@ vector<double> xData = vector<double>();
 vector<double> yData = vector<double>();
 vector<double> thData = vector<double>();
 vector<double> th2Data = vector<double>();
-int low_pass_length = 15;
+int low_pass_length = 10;
 Mat weightsMat;
 
 // mat to record data throughout the session and export to csv
@@ -131,7 +131,7 @@ int main( int argc, char** argv ) {
 
 	//weighted moving average
 	vector<double> weights = vector<double>();
-	//double ratio = 1/(double)low_pass_length;
+	double ratio = 1/(double)low_pass_length;
 	for (int i=1; i<=low_pass_length; i++){
 		weights.insert(weights.end(), i);
 	}
@@ -288,6 +288,8 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     double angle = atan2(eigen_vecs[0].y, eigen_vecs[0].x); // orientation in radians
     double angle2 = atan2(eigen_vecs[1].y, eigen_vecs[1].x); //angle of our second principal axis
 
+    //cout << " original angles " << degree(angle) << " and " << degree(angle2) << endl;
+
     //axis might jump around. add pi to angles that are about opposite from previous angles explicitly
     if (thData.size() != 0){
 
@@ -381,19 +383,21 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
   				angle2 = angle2 + M_PI;
   			}
   		}
-      }
-
+    }
 
     /* [-180, 180] normalization for angles */
     angle = fmod(angle + M_PI,2*M_PI);
 	if (angle < 0)
 		angle += 2*M_PI;
-	angle =  angle - M_PI;
+	angle = angle - M_PI;
 
 	angle2 = fmod(angle2 + M_PI,2*M_PI);
 	if (angle2 < 0)
 		angle2 += 2*M_PI;
-	angle2 =  angle2 - M_PI;
+	angle2 = angle2 - M_PI;
+
+	double angle3 = angle;
+    double angle4 = angle2;
 
 	/* record data */
     EXPORT(
@@ -424,8 +428,58 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     		th2Data.erase(th2Data.begin());
     		xData.insert(xData.end(), cntr.x);
     		yData.insert(yData.end(), cntr.y);
-    		thData.insert(thData.end(), angle + 2*M_PI);
-    		th2Data.insert(th2Data.end(), angle2 + 2*M_PI);
+
+			thData.insert(thData.end(), angle + 2*M_PI);
+	
+			th2Data.insert(th2Data.end(), angle2 + 2*M_PI);
+    		
+			/*
+
+			vector<double> thPrime = vector<double>();
+    		vector<double> th2Prime = vector<double>();
+    		thPrime.insert(thPrime.end(), thData[0]);
+    		th2Prime.insert(th2Prime.end(), th2Data[0]);
+
+    		for (int i=1; i<low_pass_length; i++){
+    			if ((thData[i]-thPrime[i-1]) < -M_PI/2){
+    				thPrime.insert(thPrime.end(), thData[i] + M_PI/2);
+    			}
+    			else if ((thData[i]- (thPrime[i-1]) > M_PI/2)){
+    				thPrime.insert(thPrime.end(), thData[i] - M_PI/2);
+    			}else {
+    				thPrime.insert(thPrime.end(), thData[i]);
+    			}
+
+    			if ((th2Data[i]-th2Prime[i-1]) < -M_PI/2){
+    				th2Prime.insert(th2Prime.end(), th2Data[i] + M_PI);
+    				//th2Prime[i] = th2Data[i] + 2*M_PI;
+    			}
+    			else if ((th2Data[i]- (th2Prime[i-1]) > M_PI/2)){
+    				th2Prime.insert(th2Prime.end(), th2Data[i] - M_PI);
+    				//th2Prime[i] = th2Data[i] - 2*M_PI;
+    			}else {
+    				th2Prime.insert(th2Prime.end(), th2Data[i]);
+    			}
+
+    		}
+
+
+    		for (int i=1; i<low_pass_length; i++){
+    			cout << " " << thData[i] << " vs " << thPrime[i];
+    		}
+    		cout << endl;
+
+    		for (int i=1; i<low_pass_length; i++){
+    			cout << " " << th2Data[i] << " vs " << th2Prime[i];
+    		}
+    		cout << endl;
+    		*/
+    		
+    		//cout << thPrime.size() << endl;
+
+
+    	//	cout << " angle1 " << angle << " x: " << eigen_val[0]*cos(angle) << " y: " << eigen_val[0]*sin(angle) << " " << endl; 
+    	//	cout << " angle2 " << angle2 << " x: " << eigen_val[1]*cos(angle2) << " y: " << eigen_val[1]*sin(angle2) << " " << endl;
 
     		double denom = (low_pass_length*(low_pass_length+1))/2;
 
@@ -433,6 +487,8 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
     		double avg_y = (weightsMat.dot(Mat(yData,true)))/denom;
     		double avg_th = (weightsMat.dot(Mat(thData,true)))/denom;
     		double avg_th2 = (weightsMat.dot(Mat(th2Data,true)))/denom;
+    		//double avg_th = (weightsMat.dot(Mat(thPrime,true)))/denom;
+    		//double avg_th2 = (weightsMat.dot(Mat(th2Prime,true)))/denom;
 
     		cntr = Point(avg_x, avg_y);
     		angle = avg_th;
@@ -442,14 +498,54 @@ double getOrientation(const vector<Point> &pts, Mat &img) {
 			angle =  angle - M_PI;
     		//curr_angle = angle;
     		angle2 = avg_th2;
+    		angle2 = fmod(angle2 + M_PI,2*M_PI);
+			if (angle2 < 0)
+				angle2 += 2*M_PI;
+			angle2 =  angle2 - M_PI;
+
     		curr_pt = Point3f(avg_x, avg_y, angle);
+
+    	//	cout << " angle1 " << angle << " x: " << eigen_val[0]*cos(angle) << " y: " << eigen_val[0]*sin(angle) << " " << endl; 
+    	//	cout << " angle2 " << angle2 << " x: " << eigen_val[1]*cos(angle2) << " y: " << eigen_val[1]*sin(angle2) << " " << endl; 
+
+    		/*
+    		if (!inBoundsAngle(angle2, angle, M_PI/2+1.0)){
+
+    			//cout << "angles : " << angle3 << " " << angle4 << endl; 
+
+    			for (int i=0; i<low_pass_length; i++)
+    				cout << ", " << thPrime[i];
+
+    			cout << endl;
+    			for (int i=0; i<low_pass_length; i++)
+    				cout << ", " << th2Prime[i];
+
+    			cout << endl;
+    			waitKey(0);
+    		}*/
 
     		 /* draw the principal components */
 			circle(img, cntr, 3, Scalar(255, 0, 255), 2);
 			Point p1 = cntr + 0.02 * Point(static_cast<int>(cos(angle) * eigen_val[0]), static_cast<int>(sin(angle) * eigen_val[0]));
+			//cout << " p1 " << p1.x <<  " , " << p1.y << endl;
 			line(img, cntr, p1, Scalar(0, 255, 0), 1, CV_AA); //principal axis - green axis
 			Point p2 = cntr - 0.12 *Point(static_cast<int>(cos(angle2) * eigen_val[1]), static_cast<int>(sin(angle2) * eigen_val[1]));
+			//cout << " p2 " << p2.x <<  " , " << p2.y << endl;
+			//circle(img, cntr, 3, Scalar(255, 0, 255), 2);
 			line(img, cntr, p2, Scalar(255, 255, 0), 1, CV_AA); //second principal axis
+
+			/*Point p3 = cntr + 0.02 * Point(static_cast<int>(cos(angle3) * eigen_val[0]), static_cast<int>(sin(angle3) * eigen_val[0]));
+			//cout << " p1 " << p1.x <<  " , " << p1.y << endl;
+			line(img, cntr, p3, Scalar(0, 255, 0), 1, CV_AA); //principal axis - green axis
+			circle(img, p3, 3, Scalar(255, 0, 255), 2);
+			Point p4 = cntr - 0.12 *Point(static_cast<int>(cos(angle4) * eigen_val[1]), static_cast<int>(sin(angle4) * eigen_val[1]));
+			//cout << " p2 " << p2.x <<  " , " << p2.y << endl;
+			//circle(img, cntr, 3, Scalar(255, 0, 255), 2);
+			line(img, cntr, p4, Scalar(255, 255, 0), 1, CV_AA); //second principal axis
+			circle(img, p4, 3, Scalar(255, 0, 255), 2);
+*/
+			//if ()
+
 
     }
 
