@@ -1,8 +1,8 @@
 /*
  * astar.h
  *
- *  Created on: Apr 24, 2016
- *      Author: gamjatang1
+ *  Created on: Apr 24, 2016*      Author: gamjatang1
+
  */
 
 #ifndef ASTAR_H

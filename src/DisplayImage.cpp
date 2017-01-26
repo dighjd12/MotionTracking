@@ -9,12 +9,12 @@
 #include <highgui.h>
 #include <iostream>
 #include <fstream>
-#include "Display.h"
+#include "Display.hpp"
 
 using namespace cv;
 using namespace std;
 
-#include "astar.h"
+#include "Astar.hpp"
 using namespace AStar;
 
 const int blur_kernel_length = 5;
